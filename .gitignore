@@ -1,0 +1,51 @@
+# Robot Web Lab local/generated state
+/build/
+/run/
+/logs/
+/workspace/*
+!/workspace/.gitkeep
+/.rwl-conda
+
+# Frontend dependencies downloaded by install.sh
+/frontend/vendor/*
+!/frontend/vendor/README.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.venv/
+venv/
+
+# Native/CMake build artifacts
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+
+# Local configuration / secrets
+.env
+.env.*
+!.env.example
+/config/project.env
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

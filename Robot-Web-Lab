@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT"
+ENV_NAME="${RWL_CONDA_ENV:-robot-web-lab}"
+CONDA_BIN="${CONDA_EXE:-}"
+
+if [[ -f .rwl-conda ]]; then
+  # shellcheck disable=SC1091
+  source .rwl-conda
+  CONDA_BIN="${RWL_CONDA_EXE:-$CONDA_BIN}"
+  ENV_NAME="${RWL_CONDA_ENV:-$ENV_NAME}"
+fi
+
+if [[ -z "$CONDA_BIN" ]]; then
+  if command -v conda >/dev/null 2>&1; then CONDA_BIN="$(command -v conda)"; fi
+fi
+if [[ -z "$CONDA_BIN" || ! -x "$CONDA_BIN" ]]; then
+  echo "ERROR: Conda was not found. Run ./install.sh first." >&2
+  exit 1
+fi
+
+ensure_python_requirements() {
+  if ! "$CONDA_BIN" run --no-capture-output -n "$ENV_NAME" python -c 'import fastapi, uvicorn, pydantic, yaml' >/dev/null 2>&1; then
+    echo "Python dependencies changed; updating the Robot Web Lab Conda environment..."
+    "$CONDA_BIN" run --no-capture-output -n "$ENV_NAME" python -m pip install -r requirements.txt
+  fi
+}
+
+ensure_python_requirements
+
+ensure_frontend_vendor() {
+  local missing=0
+  [[ -f frontend/vendor/three.module.js && $(stat -c%s frontend/vendor/three.module.js 2>/dev/null || echo 0) -ge 100000 ]] || missing=1
+  [[ -f frontend/vendor/three.core.js && $(stat -c%s frontend/vendor/three.core.js 2>/dev/null || echo 0) -ge 100000 ]] || missing=1
+  [[ -f frontend/vendor/STLLoader.js && $(stat -c%s frontend/vendor/STLLoader.js 2>/dev/null || echo 0) -ge 1000 ]] || missing=1
+  if (( missing )); then
+    echo "Browser 3D dependencies are missing; repairing them now..."
+    if ! "$CONDA_BIN" run --no-capture-output -n "$ENV_NAME" python scripts/fetch_three.py; then
+      echo "ERROR: Robot Web Lab cannot start without the local Three.js files." >&2
+      echo "       Check internet access, then run: ./scripts/fetch_three.sh" >&2
+      exit 1
+    fi
+  fi
+  [[ $(stat -c%s frontend/vendor/three.module.js 2>/dev/null || echo 0) -ge 100000 ]] || { echo "ERROR: three.module.js is missing or invalid." >&2; exit 1; }
+  [[ $(stat -c%s frontend/vendor/three.core.js 2>/dev/null || echo 0) -ge 100000 ]] || { echo "ERROR: three.core.js is missing or invalid." >&2; exit 1; }
+  [[ $(stat -c%s frontend/vendor/STLLoader.js 2>/dev/null || echo 0) -ge 1000 ]] || { echo "ERROR: STLLoader.js is missing or invalid." >&2; exit 1; }
+}
+
+ensure_frontend_vendor
+
+HOST="${RWL_HOST:-127.0.0.1}"
+PORT="${RWL_PORT:-8080}"
+LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+
+echo "Robot Web Lab v0.1.0"
+echo "  Conda: $ENV_NAME"
+echo "  Local: http://127.0.0.1:$PORT"
+if [[ -n "$LAN_IP" ]]; then echo "  LAN:   http://$LAN_IP:$PORT"; fi
+echo "  Ctrl+C to stop"
+echo
+
+ENV_PYTHON="$("$CONDA_BIN" run -n "$ENV_NAME" python -c 'import sys; print(sys.executable)' | tail -n 1)"
+if [[ -z "$ENV_PYTHON" || ! -x "$ENV_PYTHON" ]]; then
+  echo "ERROR: Could not resolve the Python executable for Conda environment: $ENV_NAME" >&2
+  exit 1
+fi
+
+cleanup_native_children() {
+  local pid_file pid cmdline
+  for pid_file in "$ROOT/run/native/controller.pid" "$ROOT/run/native/sim.pid" "$ROOT/run/native/ll.pid" "$ROOT/run/native/build.pid"; do
+    [[ -f "$pid_file" ]] || continue
+    pid="$(tr -dc '0-9' < "$pid_file" 2>/dev/null || true)"
+    rm -f "$pid_file"
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    kill -0 "$pid" 2>/dev/null || continue
+    cmdline="$(ps -p "$pid" -o args= 2>/dev/null || true)"
+    [[ "$cmdline" == *"$ROOT"* ]] || continue
+    kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+    for _ in {1..30}; do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.1
+    done
+    if kill -0 "$pid" 2>/dev/null; then
+      kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+    fi
+  done
+}
+
+trap cleanup_native_children EXIT
+
+# Run Uvicorn directly from the Conda environment instead of through `conda run`.
+# This keeps Ctrl+C on Uvicorn's foreground process group so its FastAPI lifespan
+# shutdown runs before the launcher performs the PID-file fallback cleanup above.
+"$ENV_PYTHON" -m uvicorn backend.app:app --host "$HOST" --port "$PORT"

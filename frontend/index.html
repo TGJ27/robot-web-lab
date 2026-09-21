@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Robot Web Lab</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="mockup-clean-shell">
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">🤖</span>
+    <div><strong>Robot Web Lab <em class="version-mark">v0.1.0</em></strong><small>Simulate · Control · Code · Learn</small></div>
+  </div>
+  <label class="top-select project-select"><span>Project</span><select><option>My Project</option></select></label>
+  <label class="top-select robot-select-wrap"><span>Robot</span><select id="robot-select"><option value="">No Robot Selected</option></select></label>
+  <div class="segmented level-switch"><button id="level-high" class="active">High Level</button><button id="level-low">Low Level</button></div>
+  <div class="top-spacer"></div>
+  <button id="setup-button" class="top-button">⚙ Setup</button>
+  <button id="save-layout-top" class="top-button">▣ Save Layout</button>
+  <button id="theme-toggle" class="top-button theme-button" title="Toggle light/dark theme">☾</button>
+  <button id="start-simulation" class="primary top-button" disabled>▶ Start Simulation</button>
+  <span id="sim-status" class="status-pill offline">● No Robots Installed</span>
+</header>
+
+<main class="app-shell">
+  <nav class="rail">
+    <button class="rail-item active" data-page="simulate"><span class="rail-icon">▷</span><span>Simulate</span></button>
+    <button class="rail-item" data-page="robots"><span class="rail-icon">🤖</span><span>Robots</span></button>
+    <button class="rail-item" data-page="scripts"><span class="rail-icon">⌘</span><span>Scripts / Files</span></button>
+    <button class="rail-item" data-page="assets"><span class="rail-icon">▱</span><span>Assets</span></button>
+    <button class="rail-item" data-page="settings"><span class="rail-icon">⚙</span><span>Settings</span></button>
+  </nav>
+
+  <div id="workspace" class="workspace mode-first">
+    <!-- The 3D viewport is the only primary panel that never collapses. -->
+    <section id="simulation-viewport" class="viewport-card">
+      <header class="panel-header"><strong>Simulation Viewport</strong><span id="viewport-state-label">No robot built</span></header>
+      <div id="robot-viewport" class="robot-viewport">
+        <div id="viewport-placeholder" class="viewport-placeholder">
+          <div class="ghost-robot" aria-hidden="true"><span class="ghost-head"></span><span class="ghost-body"></span><span class="ghost-arm left"></span><span class="ghost-arm right"></span><span class="ghost-leg left"></span><span class="ghost-leg right"></span></div>
+          <div class="viewport-placeholder-card"><span class="placeholder-cube">◇</span><strong>3D viewport becomes active<br>after a robot is built</strong><small>Follow the setup wizard to build your robot environment and start simulation.</small></div>
+          <div class="viewport-axis" aria-hidden="true"><b>Z</b><i class="axis-x"></i><i class="axis-y"></i><i class="axis-z"></i></div>
+        </div>
+        <div class="viewport-state" id="viewport-state" hidden>
+          <span class="dot green"></span><strong id="viewport-robot-name">—</strong>
+          <span>Mode <b id="viewport-mode">—</b></span>
+          <span>Sim <b id="viewport-time">00:00:00</b></span>
+          <span id="viewport-live-source" class="live-source">● Live MuJoCo</span>
+        </div>
+        <div id="viewport-error" class="viewport-error" hidden></div>
+      </div>
+      <footer class="viewport-tools">
+        <button id="reset-camera">⌂ Reset Camera</button>
+        <button id="follow-camera">◎ Follow</button>
+        <button id="grid-toggle">▦ Grid</button>
+        <button id="screenshot-button">▣ Screenshot</button>
+        <button id="fullscreen-button">⛶ Full Screen</button>
+      </footer>
+    </section>
+
+    <!-- FIRST RUN / SETUP WIZARD -->
+    <section id="first-run-view" class="page-view first-run-view" hidden>
+      <div class="first-run-main">
+        <div class="first-run-title-row">
+          <div>
+            <h1>Welcome / First Run Setup</h1>
+            <h2>Let's get you started with Robot Web Lab</h2>
+            <p>It looks like you haven't built any robots yet. Choose one or more robots to build selectively.<br>You can install the High-Level Control Pack for simulation control and/or the Low-Level SDK Pack for development. You can always add more robots later.</p>
+          </div>
+          <span class="setup-chip"><b>01</b> First-Run Setup</span>
+        </div>
+
+        <div class="setup-steps">
+          <div class="setup-step active"><b>1</b><strong>Select Robots</strong><span>Choose one or more robots to build</span></div>
+          <div class="setup-step"><b>2</b><strong>Select Packages</strong><span>Choose control packs to install</span></div>
+          <div class="setup-step"><b>3</b><strong>Build</strong><span>We'll set up the environment for you</span></div>
+        </div>
+
+        <details class="setup-section collapse-card" data-collapsible open>
+          <summary><span>⚙</span><div><strong>Available Robots</strong><small>Select the robot(s) you want to build. You can choose multiple robots.</small></div></summary>
+          <div class="collapse-body">
+            <div id="robot-build-grid" class="robot-build-grid first-run-robot-grid"></div>
+            <details class="more-robots" data-collapsible>
+              <summary>More Robots</summary>
+              <div id="more-robot-build-grid" class="robot-build-grid secondary-robot-grid"></div>
+            </details>
+          </div>
+        </details>
+
+        <details class="setup-section collapse-card" data-collapsible open>
+          <summary><span>⚙</span><div><strong>Installation Options</strong><small>Choose which packs to build for the selected robots.</small></div></summary>
+          <div class="collapse-body installation-options">
+            <label class="install-option-card"><input id="global-pack-high" type="checkbox" checked><span><strong>Install High-Level Control Pack</strong><small>Simulation controller, FSM, locomotion and supported policies.</small></span></label>
+            <label class="install-option-card"><input id="global-pack-low" type="checkbox" checked><span><strong>Install Low-Level SDK Pack</strong><small>LowCmd/LowState development and simulator-compatible SDK examples.</small></span></label>
+          </div>
+        </details>
+
+        <div class="first-run-actions">
+          <button id="build-selected" class="primary build-selected-large">🔨 Build Selected</button>
+          <button id="view-build-details" class="secondary">▤ View Details</button>
+          <button id="skip-first-run" class="secondary">› Skip for Now</button>
+          <span>You can always build more robots later from the Robots page.</span>
+        </div>
+
+        <details id="first-build-progress" class="collapse-card build-details-card" data-collapsible>
+          <summary>Build Progress & Logs</summary>
+          <div class="collapse-body"><div class="build-actions"><button id="cancel-build" class="secondary" disabled>Cancel Build</button></div><div id="build-progress" class="build-progress"><span>No build running.</span></div><pre id="build-log" class="terminal small-terminal"></pre></div>
+        </details>
+        <div id="package-summary" class="sr-only">Select one or more robots.</div>
+      </div>
+
+      <aside class="first-run-overview">
+        <details class="collapse-card overview-card" data-collapsible open>
+          <summary>Build Overview</summary>
+          <div class="collapse-body overview-stack">
+            <div class="overview-empty"><span class="overview-cubes">◇</span><strong>No robots selected</strong><small>Select one or more robots to see build details here.</small></div>
+            <div class="overview-row"><span>Selected robots</span><b id="overview-selected-count">—</b></div>
+            <div class="overview-row"><span>Estimated disk</span><b id="overview-disk">—</b></div>
+            <div class="overview-row"><span>Estimated build time</span><b id="overview-time">—</b></div>
+            <div class="overview-row"><span>Conda environment</span><b>robot-web-lab</b></div>
+            <div class="overview-row"><span>Third-party source</span><b>Pinned</b></div>
+          </div>
+        </details>
+        <div class="overview-info">ⓘ Build information will appear after you select robot(s).</div>
+      </aside>
+    </section>
+
+    <!-- ROBOTS / BUILD MANAGER: full workspace -->
+    <section id="robots-view" class="page-view robots-view-full" hidden>
+      <div class="robots-build-header">
+        <div>
+          <span class="eyebrow">Robots & Builds</span>
+          <h1>Robots / Build Manager</h1>
+          <p>Select the robots you want to install and build. Manage build status and dependencies.</p>
+        </div>
+        <div class="button-row">
+          <button id="robots-refresh" class="secondary">↻ Refresh</button>
+          <button id="robot-installation-guide" class="secondary">▣ Robot Installation Guide</button>
+        </div>
+      </div>
+
+      <div class="robots-manager-shell">
+        <aside class="robot-preview-panel">
+          <div class="section-heading"><span class="section-icon">◇</span><strong>Robot Preview</strong></div>
+          <div class="robot-preview-stage">
+            <img id="robot-manager-preview-image" alt="Selected robot preview">
+            <div class="robot-preview-grid" aria-hidden="true"></div>
+            <div class="robot-preview-axis" aria-hidden="true"><b>Z</b><span class="x">X</span><span class="y">Y</span></div>
+          </div>
+          <div class="robot-preview-meta">
+            <div class="robot-preview-title-row"><h2 id="robot-manager-preview-name">Select a robot</h2><span id="robot-manager-preview-status" class="preview-status"><i></i> Not Built</span></div>
+            <div class="preview-kv"><span>Mode:</span><b id="robot-manager-preview-mode">High Level</b></div>
+            <div class="preview-kv"><span>Control:</span><b id="robot-manager-preview-control">Build packages</b></div>
+            <div class="preview-kv"><span>Packages:</span><b id="robot-manager-preview-packages">—</b></div>
+            <button id="robot-manager-preview-details" class="secondary wide-button">View Details →</button>
+          </div>
+        </aside>
+
+        <main class="robots-build-column">
+          <section class="available-robots-card">
+            <div class="available-robots-heading"><div><span class="section-icon">◇</span><strong>Available Robots</strong> <span id="robot-manager-available-count" class="muted-count">(0)</span></div><button id="robot-manager-collapse-cards" class="icon-button" title="Collapse robot cards">⌃</button></div>
+            <div id="robot-manager-grid" class="robot-manager-grid"></div>
+          </section>
+
+          <div class="robot-manager-accordions">
+            <details class="collapse-card robot-manager-accordion" data-collapsible>
+              <summary><span>◉</span><strong>Installed Robots</strong><span class="summary-count">(<b id="robots-installed-count">0</b>)</span></summary>
+              <div class="collapse-body"><div id="installed-robots-list" class="list-stack"></div></div>
+            </details>
+            <details class="collapse-card robot-manager-accordion" data-collapsible>
+              <summary><span>☷</span><strong>Build Queue</strong><span class="summary-count">(<b id="robot-build-queue-count">0</b>)</span></summary>
+              <div class="collapse-body"><div id="manager-build-progress" class="build-progress"></div><pre id="manager-build-log" class="terminal small-terminal"></pre></div>
+            </details>
+            <details class="collapse-card robot-manager-accordion" data-collapsible>
+              <summary><span>⚙</span><strong>Environment Details</strong></summary>
+              <div class="collapse-body environment-detail-grid">
+                <div><span>Runtime</span><b>Native MuJoCo / SDK unchanged</b></div>
+                <div><span>Python environment</span><b>robot-web-lab</b></div>
+                <div><span>Build profiles</span><b>YAML</b></div>
+                <div><span>Assets</span><b>Local / offline</b></div>
+              </div>
+            </details>
+          </div>
+        </main>
+
+        <aside class="build-overview-panel">
+          <div class="section-heading"><span class="section-icon">◇</span><strong>Build Overview</strong></div>
+          <div class="overview-metrics">
+            <div><span>⚙ Selected robots</span><b id="robots-selected-count">0</b></div>
+            <div><span>◇ Estimated disk usage</span><b id="manager-overview-disk">—</b></div>
+            <div><span>◷ Estimated build time</span><b id="manager-overview-time">—</b></div>
+          </div>
+          <button class="primary build-overview-action" id="manager-build-selected">🔨 Build Selected (0)</button>
+          <button class="secondary build-overview-action" id="manager-rebuild-selected">↻ Rebuild Selected</button>
+          <div class="overview-info manager-overview-info">ⓘ Selected robots will be built with the required packages and dependencies.</div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- HIGH LEVEL RIGHT ACCORDION -->
+    <section id="high-level-view" class="page-view high-level-view" hidden>
+      <div class="control-panel-heading"><div><span class="eyebrow">High Level</span><h1>High-Level Controls</h1><p>One control group opens at a time.</p></div><button class="tiny" data-collapse-all="#high-level-view">Collapse</button></div>
+      <details class="collapse-card" data-collapsible data-exclusive-group="hl" open><summary>1. FSM / Modes</summary><div class="collapse-body"><div class="mode-grid"><button data-fsm="Passive">◉<span>Passive</span><kbd data-key-for="passive">1</kbd></button><button data-fsm="FixStand">♙<span>FixStand</span><kbd data-key-for="fix_stand">2</kbd></button><button data-fsm="Velocity">◌<span>Velocity</span><kbd data-key-for="velocity">3</kbd></button></div><p class="hint">Use the High Level / Low Level toggle in the top bar to change control ownership.</p></div></details>
+      <details class="collapse-card" data-collapsible data-exclusive-group="hl"><summary>2. Velocity Control</summary><div class="collapse-body"><label class="slider-row">Forward / Back (W/S)<input id="velocity-vx" type="range" min="-.5" max="1" step=".02" value="0"><output id="velocity-vx-value">0.00</output></label><label class="slider-row">Left / Right (A/D)<input id="velocity-vy" type="range" min="-.5" max=".5" step=".02" value="0"><output id="velocity-vy-value">0.00</output></label><label class="slider-row">Yaw (Q/E)<input id="velocity-yaw" type="range" min="-1" max="1" step=".05" value="0"><output id="velocity-yaw-value">0.00</output></label></div></details>
+      <details id="mimic-panel" class="collapse-card" data-collapsible data-exclusive-group="hl"><summary>3. Policies / Dance</summary><div class="collapse-body">
+        <div class="policy-row built-in-policy"><div><strong>Dance1 Subject2</strong><small>Built-in G1 mimic policy · requires Velocity mode</small></div><div class="policy-actions"><kbd data-key-for="dance_default">U</kbd><button class="primary" data-run-policy="dance1_subject2">Run</button></div></div>
+        <div class="policy-divider"><span>Additional policy files</span></div>
+        <div id="mimic-drop-zone" class="drop-zone"><strong>Drop mimic policy files here</strong><small>.onnx · .npz · .yaml · .json</small><input id="mimic-file-input" type="file" multiple hidden></div><div id="mimic-policy-list" class="list-stack"></div>
+      </div></details>
+      <details class="collapse-card" data-collapsible data-exclusive-group="hl"><summary>4. Hanger Control</summary><div class="collapse-body"><div class="button-row"><button data-hanger="attach">← Attach</button><button data-hanger="release">→ Release</button><button data-hanger="raise">↑ Raise</button><button data-hanger="lower">↓ Lower</button></div><p class="hint">The hanger is a simulator-level tool and remains available in HL and LL modes.</p></div></details>
+      <details class="collapse-card" data-collapsible data-exclusive-group="hl"><summary>5. Keyboard Mapping</summary><div class="collapse-body"><div id="keymap-list" class="keymap-list"></div><button id="reset-keymap" class="secondary">Reset to Default</button></div></details>
+      <details class="collapse-card" data-collapsible data-exclusive-group="hl"><summary>6. Telemetry</summary><div class="collapse-body"><div id="telemetry-grid" class="telemetry-grid"></div></div></details>
+    </section>
+
+    <!-- LOW LEVEL: code-first layout. The permanent 3D viewport remains visible. -->
+    <section id="low-level-view" class="page-view low-level-view" hidden>
+      <details id="ll-examples-panel" class="collapse-card ll-examples-panel" data-collapsible open><summary>Examples</summary><div class="collapse-body"><input id="example-search" class="search" placeholder="Search low-level examples…"><div id="examples-tree" class="examples-tree"></div><button id="new-example" class="primary wide-button">＋ New Example</button></div></details>
+      <div id="ll-left-splitter" class="layout-splitter vertical" data-splitter="low-left" title="Drag to resize examples / viewport"></div>
+      <div id="ll-right-splitter" class="layout-splitter vertical" data-splitter="low-right" title="Drag to resize viewport / editor"></div>
+      <div id="ll-terminal-splitter" class="layout-splitter horizontal" data-splitter="low-terminal" title="Drag to resize viewport / terminal"></div>
+      <section id="ll-right-stack" class="ll-right-stack">
+        <details id="ll-editor-panel" class="collapse-card ll-editor-panel" data-collapsible open>
+          <summary>Code Editor <span id="editor-mode" class="summary-badge">—</span></summary>
+          <div class="collapse-body editor-body">
+            <div class="editor-toolbar">
+              <div class="editor-context"><span id="editor-path">No example open</span><small id="keyboard-focus-state">Robot keys active · Ctrl+0 Low Level · Ctrl+1 High Level</small></div>
+              <div class="editor-view-actions"><button id="editor-focus" title="Hide secondary panels and give more room to code">Focus Code</button><button id="editor-maximize" title="Maximize code while keeping the 3D viewport visible">Max Code</button></div>
+              <div><button id="copy-example" disabled>Copy to Workspace</button><button id="save-source" disabled>Save</button><button id="build-source" class="primary" disabled>Build</button><button id="run-source" class="success" disabled>Run</button><button id="stop-source" class="danger" disabled>Stop</button></div>
+            </div>
+            <textarea id="code-editor" spellcheck="false" placeholder="Open an SDK example or create a workspace file…"></textarea>
+          </div>
+        </details>
+        <details id="ll-workflow-panel" class="collapse-card ll-workflow-panel" data-collapsible>
+          <summary>LL Workflow <span id="ll-owner-badge" class="summary-badge">Owner: —</span></summary>
+          <div class="collapse-body"><div class="workflow-grid"><div><b>1</b><strong>Open Example</strong><small>Browse a simulator-compatible low-level example.</small></div><div><b>2</b><strong>Copy</strong><small>Keep SDK source read-only.</small></div><div><b>3</b><strong>Edit / Build</strong><small>Work in your project copy.</small></div><div><b>4</b><strong>Run</strong><small>The top Low Level toggle owns LL Debug automatically.</small></div></div><div class="mode-owner-note">Control ownership follows the top <b>High Level / Low Level</b> switch.</div></div>
+        </details>
+      </section>
+    </section>
+
+    <!-- SHARED CONSOLE: collapsible, moved by layout mode -->
+    <details id="console-panel" class="collapse-card console-panel" data-collapsible open>
+      <summary>Logs & Terminal</summary>
+      <div class="collapse-body"><div class="terminal-tabs" role="tablist" aria-label="Console views">
+        <button class="active" data-terminal-tab="logs" role="tab" aria-selected="true">Logs</button>
+        <button data-terminal-tab="build" role="tab" aria-selected="false">Build Output</button>
+        <button data-terminal-tab="lowstate" role="tab" aria-selected="false">LowState</button>
+        <button data-terminal-tab="dds" role="tab" aria-selected="false">DDS Monitor</button>
+        <span class="terminal-tabs-spacer"></span>
+        <label class="terminal-autoscroll"><input id="terminal-autoscroll" type="checkbox" checked> Auto Scroll</label>
+        <button id="terminal-clear">Clear</button>
+      </div><pre id="terminal-output" class="terminal"></pre></div>
+    </details>
+
+    <!-- SCRIPTS / FILES: full workspace -->
+    <section id="scripts-view" class="page-view scripts-view" hidden>
+      <div class="full-page-header"><div><span class="eyebrow">Scripts / Files</span><h1>Low-Level Files</h1><p>Built-in SDK sources are read-only but buildable/runnable. Workspace files can be edited, renamed, or deleted.</p></div><button id="scripts-new-file" class="primary">＋ New File</button></div>
+      <div class="scripts-layout">
+        <nav class="scripts-sidebar">
+          <button class="active" data-scripts-section="builtin">Built-in SDK</button>
+          <button data-scripts-section="workspace">My Files</button>
+          <button data-scripts-section="profiles">Build Profiles</button>
+        </nav>
+        <div class="scripts-content">
+          <section class="scripts-panel" data-scripts-panel="builtin"><h2>Built-in SDK</h2><p class="settings-lead">Read-only Unitree low-level sources. Build and run them directly without copying.</p><div id="scripts-builtin-list" class="file-manager-list"></div></section>
+          <section class="scripts-panel" data-scripts-panel="workspace" hidden><h2>My Files</h2><p class="settings-lead">Editable project files. Rename and delete are available here.</p><div id="scripts-workspace-list" class="file-manager-list"></div></section>
+          <section class="scripts-panel" data-scripts-panel="profiles" hidden><h2>Build Profiles</h2><p class="settings-lead">YAML profiles control includes, libraries, definitions and inherited build behavior. Renaming a file does not change its profile.</p><textarea id="build-profile-editor" class="build-profile-editor" spellcheck="false"></textarea><div class="button-row"><button id="reload-build-profiles">Reload</button><button id="save-build-profiles" class="primary">Save Build Profiles</button></div></section>
+        </div>
+      </div>
+    </section>
+
+    <!-- ASSETS / MIMIC MANAGER -->
+    <section id="assets-view" class="page-view assets-view" hidden>
+      <div class="page-title"><div><span class="eyebrow">Assets</span><h1>Mimic Policy Manager</h1><p>Manage user policies without changing pinned Unitree source.</p></div></div>
+      <details class="collapse-card" data-collapsible open><summary>1. Upload Policy Files</summary><div class="collapse-body"><div id="asset-drop-zone" class="drop-zone"><strong>Drop policy files here</strong><small>.onnx · .npz · .yaml · .json</small></div></div></details>
+      <details class="collapse-card" data-collapsible open><summary>2. Loaded Policies</summary><div class="collapse-body"><div id="asset-policy-list" class="list-stack"></div></div></details>
+      <details class="collapse-card" data-collapsible><summary>3. Mimic Button Mapping</summary><div class="collapse-body"><div id="mimic-button-map" class="list-stack muted">Assign keyboard keys from Keyboard Mapping.</div></div></details>
+      <details class="collapse-card" data-collapsible><summary>4. Quick Actions</summary><div class="collapse-body"><p class="muted">Quick Actions are keyboard-bound shortcuts. Duplicate keys require explicit Replace or Swap confirmation.</p></div></details>
+    </section>
+
+    <!-- SETTINGS: full workspace, no 3D viewport -->
+    <section id="settings-view" class="page-view settings-view" hidden>
+      <div class="settings-header"><div><span class="eyebrow">Settings</span><h1>Robot Web Lab Settings</h1><p>Choose a category on the left. Changes are kept focused and easy to scan.</p></div></div>
+      <div class="settings-layout">
+        <nav class="settings-sidebar" aria-label="Settings categories">
+          <button class="active" data-settings-section="general">General</button>
+          <button data-settings-section="robots">Robots & Builds</button>
+          <button data-settings-section="simulation">Simulation</button>
+          <button data-settings-section="keyboard">Keyboard</button>
+          <button data-settings-section="appearance">Appearance</button>
+          <button data-settings-section="paths">Paths</button>
+          <button data-settings-section="safety">Safety & Ownership</button>
+          <button data-settings-section="advanced">Advanced</button>
+        </nav>
+        <div class="settings-content">
+          <div class="settings-panel" data-settings-panel="general"><h2>General</h2><p class="settings-lead">Core application behavior.</p><div class="settings-card"><div><strong>Active robot</strong><small>Only successfully built robots can become active.</small></div><b id="settings-active-robot">—</b></div><div class="settings-card"><div><strong>Current control level</strong><small>The top toggle changes native ownership.</small></div><b id="settings-control-level">—</b></div></div>
+          <div class="settings-panel" data-settings-panel="robots" hidden><h2>Robots & Builds</h2><p class="settings-lead">Build management stays selective.</p><div class="settings-card"><div><strong>Installed robots</strong><small>Manage robot packs from the Robots page.</small></div><button data-settings-action="open-robots">Open Robots</button></div><div class="settings-card"><div><strong>SDK examples</strong><small>Low-level examples compile on demand.</small></div><b>On demand</b></div></div>
+          <div class="settings-panel" data-settings-panel="simulation" hidden><h2>Simulation</h2><p class="settings-lead">Native headless MuJoCo runtime.</p><div class="settings-card"><div><strong>Runtime</strong><small>Physics stays native; visualization stays in the browser.</small></div><b>Headless MuJoCo</b></div><div class="settings-card"><div><strong>DDS interface</strong><small>Loopback for local simulation.</small></div><b>lo</b></div><div class="settings-card"><div><strong>Simulation status</strong><small>Includes native process IDs when running.</small></div><b id="settings-sim-status">Stopped</b></div></div>
+          <div class="settings-panel" data-settings-panel="keyboard" hidden><h2>Keyboard</h2><p class="settings-lead">Click a key assignment, then press the replacement key. Duplicate keys require Replace or Swap.</p><div id="settings-keymap-list" class="keymap-list settings-keymap-grid"></div></div>
+          <div class="settings-panel" data-settings-panel="appearance" hidden><h2>Appearance</h2><p class="settings-lead">Choose a comfortable interface theme.</p><div class="settings-card"><div><strong>Theme</strong><small>Neutral Light or engineering Dark.</small></div><div class="theme-choice"><button data-set-theme="light">☀ Light</button><button data-set-theme="dark">☾ Dark</button></div></div></div>
+          <div class="settings-panel" data-settings-panel="paths" hidden><h2>Paths</h2><p class="settings-lead">Project-managed locations.</p><div class="path-list"><code>third_party/unitree_rl_mjlab</code><code>third_party/unitree_sdk2</code><code>third_party/unitree_mujoco</code><code>build/native/prefix</code><code>workspace/examples</code></div></div>
+          <div class="settings-panel" data-settings-panel="safety" hidden><h2>Safety & Ownership</h2><p class="settings-lead">Exactly one control owner is allowed at a time.</p><div class="settings-card"><div><strong>High Level</strong><small>g1_ctrl / policy controller owns commands.</small></div><b>Exclusive</b></div><div class="settings-card"><div><strong>Low Level</strong><small>LL Debug stops the HL controller before SDK code can run.</small></div><b>Exclusive</b></div><div class="settings-card"><div><strong>Shutdown</strong><small>LL program → controller → MuJoCo are stopped and reaped in order.</small></div><b>Managed</b></div></div>
+          <div class="settings-panel" data-settings-panel="advanced" hidden><h2>Advanced</h2><p class="settings-lead">Runtime diagnostics and browser layout storage.</p><div class="settings-card"><div><strong>Conda environment</strong><small>Python runtime environment used by Robot Web Lab.</small></div><b>robot-web-lab</b></div><div class="settings-card"><div><strong>Reset saved layout</strong><small>Clears browser-only panel sizes and accordion state.</small></div><button id="reset-saved-layout" class="danger">Reset Layout</button></div></div>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+
+<div id="action-confirm-modal" class="modal action-confirm-modal" hidden><div class="modal-card"><h3 id="action-confirm-title">Confirm action</h3><p id="action-confirm-text"></p><div class="modal-actions"><button id="action-confirm-cancel">Cancel</button><button id="action-confirm-ok" class="primary">Confirm</button></div></div></div>
+<div id="duplicate-key-modal" class="modal duplicate-modal" hidden><div class="modal-card"><h3>Key already assigned</h3><p id="duplicate-key-text"></p><div class="modal-actions"><button data-conflict="replace" class="primary">Replace</button><button data-conflict="swap">Swap</button><button data-conflict="cancel">Cancel</button></div></div></div>
+<div id="new-example-modal" class="modal" hidden><div class="modal-card"><button class="modal-close" data-close="new-example-modal">×</button><h3>New Low-Level Example</h3><label>Name<input id="new-example-name" value="my_motor_test"></label><label>Language<select id="new-example-language"><option value="cpp">C++</option><option value="python">Python</option></select></label><label>Template<select id="new-example-template"><option value="blank">Blank</option><option value="lowstate">LowState Subscriber</option></select></label><div class="modal-actions"><button data-close="new-example-modal">Cancel</button><button id="create-example" class="primary">Create</button></div></div></div>
+
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>
