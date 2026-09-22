@@ -260,3 +260,25 @@ def test_startup_recovers_existing_g1_native_artifacts_if_metadata_is_missing(tm
     settings = client.get('/api/settings').json()
     assert settings['active_robot'] == 'unitree_g1'
     assert settings['installed_robots'] == ['unitree_g1']
+
+
+def test_build_api_rejects_rebuild_of_currently_running_robot(tmp_path: Path):
+    client, _, _ = make_client(tmp_path)
+    client.app.state.build_manager.mark_installed("unitree_g1", high_level=True, low_level=True)
+    client.app.state.supervisor.status = lambda: {"running": True, "robot_id": "unitree_g1"}
+    response = client.post("/api/build/start", json={"robots": [{"robot_id": "unitree_g1", "high_level": True, "low_level": True}]})
+    assert response.status_code == 409
+    assert "Stop the Unitree G1 simulation" in response.json()["detail"]
+
+
+def test_settings_api_rejects_robot_switch_while_simulation_runs(tmp_path: Path):
+    client, _, _ = make_client(tmp_path)
+    client.app.state.build_manager.mark_installed("unitree_g1", high_level=True, low_level=True)
+    client.app.state.build_manager.mark_installed("unitree_go2", high_level=False, low_level=True)
+    client.app.state.supervisor.status = lambda: {"running": True, "robot_id": "unitree_g1"}
+    settings = client.get("/api/settings").json()
+    settings["installed_robots"] = ["unitree_g1", "unitree_go2"]
+    settings["active_robot"] = "unitree_go2"
+    response = client.put("/api/settings", json=settings)
+    assert response.status_code == 409
+    assert "before switching robots" in response.json()["detail"]

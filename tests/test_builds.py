@@ -32,10 +32,20 @@ def test_build_request_rejects_unknown_or_unsupported_high_level(tmp_path: Path)
     except ValueError:
         pass
     try:
-        manager.validate_request([{"robot_id": "unitree_r1", "high_level": True, "low_level": True}])
-        assert False, "R1 web high-level is intentionally unavailable"
+        manager.validate_request([{"robot_id": "unitree_h2", "high_level": True, "low_level": True}])
+        assert False, "H2 has no pinned rl_mjlab deploy controller"
     except ValueError:
         pass
+
+
+def test_rl_mjlab_robots_expose_web_high_level_when_upstream_controller_exists(tmp_path: Path):
+    manager = BuildManager(tmp_path / "build_state.json", RobotRegistry.default(), project_root=tmp_path)
+    for rid in ("unitree_g1","unitree_g1_23dof","unitree_go2","unitree_h1","unitree_a2","unitree_r1"):
+        robot=RobotRegistry.default().get(rid)
+        assert robot.supports_web_high_level is True
+        low=robot.supports_low_level
+        clean=manager.validate_request([{"robot_id":rid,"high_level":True,"low_level":low}])
+        assert clean[0]["high_level"] is True
 
 
 def test_registry_defines_native_build_metadata():
@@ -45,7 +55,8 @@ def test_registry_defines_native_build_metadata():
     assert g1.controller_dir == "deploy/robots/g1"
     assert g1.model_xml.endswith("scene_g1.xml")
     assert g1.supports_web_high_level is True
-    assert registry.get("unitree_r1").supports_web_high_level is False
+    assert registry.get("unitree_r1").supports_web_high_level is True
+    assert registry.get("unitree_h2").supports_web_high_level is False
 
 def test_r1_and_h2_use_pinned_unitree_mujoco_models_for_ll_simulation():
     registry=RobotRegistry.default()

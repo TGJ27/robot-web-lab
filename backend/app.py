@@ -18,6 +18,7 @@ from .examples import ExampleService, UnsafePathError
 from .mimic import MimicPolicyStore, UnsupportedPolicyFile
 from .models import ModelService
 from .registry import RobotRegistry
+from .policy_assets import policy_status
 from .runner import ControlOwnershipError, LowLevelRunner, ProcessBusyError
 from .runtime import EventHub, InvalidTransition, MockRuntimeAdapter
 from .settings import AppSettings, KeyConflictError, SettingsStore
@@ -129,11 +130,24 @@ def create_app(project_root: Path | None = None, *, runtime: MockRuntimeAdapter 
     @app.get("/api/health")
     def health(): return {"ok":True,"version":app.version,"runtime":"native-supervisor-ready","build":build_manager.status()}
     @app.get("/api/robots")
-    def robots(): return [asdict(r) for r in registry.list()]
+    def robots():
+        payload=[]
+        for robot in registry.list():
+            item=asdict(robot)
+            item.update(policy_status(root,robot))
+            # Only expose Mimic as runnable when every required native asset exists.
+            item["supports_mimic"]=bool(robot.supports_mimic and item["mimic_ready"])
+            payload.append(item)
+        return payload
     @app.get("/api/build/status")
     def build_status(): return build_manager.status()
     @app.post("/api/build/start")
     async def build_start(payload:BuildRequest):
+        sim=supervisor.status()
+        requested={i.robot_id for i in payload.robots}
+        if sim.get("running") and sim.get("robot_id") in requested:
+            running=registry.get(sim["robot_id"])
+            raise HTTPException(409,f"Stop the {running.display_name} simulation before rebuilding that robot")
         try: result=build_manager.start([i.model_dump() for i in payload.robots])
         except (ValueError,KeyError) as exc: raise HTTPException(400,str(exc)) from exc
         except BuildBusyError as exc: raise HTTPException(409,str(exc)) from exc
@@ -167,6 +181,10 @@ def create_app(project_root: Path | None = None, *, runtime: MockRuntimeAdapter 
         built_now=set(build_manager.status()["installed_robots"]); requested=set(payload.installed_robots or [])
         if not requested.issubset(built_now): raise HTTPException(400,"installed_robots may only contain successfully built robots")
         if payload.active_robot is not None and payload.active_robot not in requested: raise HTTPException(400,"Active robot must be successfully built and installed")
+        sim=supervisor.status()
+        if sim.get("running") and payload.active_robot is not None and payload.active_robot != sim.get("robot_id"):
+            running=registry.get(sim["robot_id"])
+            raise HTTPException(409,f"Stop the {running.display_name} simulation before switching robots")
         try:
             settings_store.save(payload)
             if payload.active_robot: robot=registry.get(payload.active_robot); runtime.set_robot(payload.active_robot,robot.joint_count or 0)

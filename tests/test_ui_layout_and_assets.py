@@ -73,3 +73,9 @@ def test_panel_state_storage_migrates_to_current_release():
     assert 'rwl-v010-ll-examples-width' in JS
     assert 'rwl-v010-ll-editor-width' in JS
     assert 'rwl-v010-ll-terminal-height' in JS
+
+
+def test_browser_model_view_supports_obj_assets_for_go2():
+    js=(ROOT / 'frontend' / 'robot_view.js').read_text(encoding='utf-8')
+    assert 'parseObjGeometry' in js
+    assert "endsWith('.obj')" in js

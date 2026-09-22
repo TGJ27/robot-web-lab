@@ -30,12 +30,12 @@ def test_ui_matches_approved_clean_mockup_contract():
     html = text('frontend/index.html')
     css = text('frontend/styles.css')
     assert 'id="save-layout-top"' in html
-    assert 'class="profile-button"' in html
+    assert 'class="profile-button"' not in html
     assert 'control-panel-heading' in html
     assert 'class="mockup-clean-shell"' in html
     assert '.mockup-clean-shell' in css
     assert '.control-panel-heading' in css
-    assert '.profile-button' in css
+    assert '.profile-button' not in css
 
 
 def test_release_has_visible_version_marker():
@@ -46,3 +46,37 @@ def test_launcher_repairs_missing_python_requirements_for_patch_updates():
     launcher = text('Robot-Web-Lab')
     assert 'import fastapi, uvicorn, pydantic, yaml' in launcher
     assert 'python -m pip install -r requirements.txt' in launcher
+
+
+def test_installer_runs_submodule_bootstrap_via_bash_without_init_repo_helper():
+    sh=text('install.sh')
+    assert 'bash "$ROOT/scripts/bootstrap_submodules.sh"' in sh
+    assert 'init_git_repo.sh' not in sh
+
+
+def test_multirobot_high_level_build_applies_generic_web_keyboard_bridge():
+    root = Path(__file__).resolve().parents[1]
+    native = (root / "scripts" / "native_build.py").read_text(encoding="utf-8")
+    patch = (root / "scripts" / "apply_web_hl_patch.py").read_text(encoding="utf-8")
+    assert "apply_web_hl_patch.py" in native
+    assert "rwl_web_control::apply(lowstate->joystick);" in patch
+    assert 'std::getenv("RWL_SIM_RUNTIME_DIR")' in patch
+    for action in ("Passive", "FixStand", "Velocity"):
+        assert action in patch
+
+
+def test_supervisor_exports_generic_runtime_dir_for_all_controllers():
+    root = Path(__file__).resolve().parents[1]
+    supervisor = (root / "backend" / "supervisor.py").read_text(encoding="utf-8")
+    assert "RWL_SIM_RUNTIME_DIR" in supervisor
+
+def test_g1_23dof_mimic_web_pack_is_enabled():
+    from backend.registry import RobotRegistry
+    robot = RobotRegistry.default().get('unitree_g1_23dof')
+    assert robot.supports_web_high_level is True
+    assert robot.supports_mimic is True
+    native = (ROOT / 'scripts' / 'native_build.py').read_text(encoding='utf-8')
+    bridge = (ROOT / 'scripts' / 'apply_web_hl_patch.py').read_text(encoding='utf-8')
+    assert 'apply_g1_23dof_mimic_patch.py' in native
+    assert 'action == "Mimic"' in bridge
+    assert 'joystick.RB(true)' in bridge and 'joystick.A(true)' in bridge

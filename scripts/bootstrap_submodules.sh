@@ -21,7 +21,10 @@ setup_repo() {
         git clone "$url" "$path"
     fi
 
-    git -C "$path" checkout --detach "$sha"
+    # Force tracked upstream files back to the pinned revision. This removes
+    # stale/partial source edits while preserving untracked build outputs.
+    git -C "$path" checkout --detach -f "$sha"
+    git -C "$path" reset --hard "$sha"
 }
 
 mkdir -p third_party

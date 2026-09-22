@@ -41,7 +41,39 @@ function applyTheme(theme){document.documentElement.dataset.theme=theme||'light'
 async function setTheme(theme){settings.theme=theme;await saveSettings();applyTheme(theme)}
 async function saveSettings(){settings=await api('/api/settings',{method:'PUT',body:JSON.stringify(settings)})}
 function renderRobotSelect(){const sel=$('#robot-select');sel.innerHTML='';const ids=installed();if(!ids.length){sel.add(new Option('No Robot Selected',''));sel.disabled=true;return}sel.disabled=false;for(const id of ids){const r=robotBy(id);if(r)sel.add(new Option(r.display_name,id))}sel.value=settings.active_robot||ids[0]||''}
-async function chooseRobot(id){if(!id)return;settings.active_robot=id;if(!settings.installed_robots.includes(id))settings.installed_robots=installed();await saveSettings();state=await api('/api/state');renderState(state);await loadActiveRobot();await refreshExamples();await refreshScriptsFiles();await refreshMimic();renderRobotManager()}
+async function stopSimulationAndContinue(message,affectedRobotIds=null){
+  try{simulationStatus=await api('/api/simulation/status');renderSimulationStatus()}catch(e){log(`Could not refresh simulation status: ${e.message}`,'WARN')}
+  if(!simulationStatus?.running)return true;
+  const runningId=simulationStatus.robot_id||null;
+  if(Array.isArray(affectedRobotIds)&&runningId&&!affectedRobotIds.includes(runningId))return true;
+  const runningRobot=robotBy(runningId),runningName=runningRobot?.display_name||'The current robot';
+  const ok=await confirmAction('Stop running simulation?',`${runningName} is currently running.\n\n${message}\n\nStop the simulation and continue?`,'Stop & Continue');
+  if(!ok)return false;
+  try{
+    stopVelocityKeyboardLoop(true);
+    simulationStatus=await api('/api/simulation/stop',{method:'POST'});
+    state=await api('/api/state');
+    renderState(state);renderSimulationStatus();
+    log(`Stopped ${runningName} simulation to continue.`);
+    return true;
+  }catch(e){log(e.message,'ERROR');alert(e.message);return false}
+}
+async function chooseRobot(id){
+  if(!id)return false;
+  const previous=settings.active_robot;
+  if(id===previous)return true;
+  const target=robotBy(id);
+  if(!(await stopSimulationAndContinue(`Switch to ${target?.display_name||id}.`))){
+    const sel=$('#robot-select');if(sel)sel.value=previous||'';
+    return false;
+  }
+  settings.active_robot=id;
+  if(!settings.installed_robots.includes(id))settings.installed_robots=installed();
+  await saveSettings();
+  state=await api('/api/state');renderState(state);
+  await loadActiveRobot();await refreshExamples();await refreshScriptsFiles();await refreshMimic();renderRobotManager();
+  return true;
+}
 async function loadActiveRobot(){const r=currentRobot();const ph=$('#viewport-placeholder'),vs=$('#viewport-state');if(!r){ph.hidden=false;vs.hidden=true;view?.clear();return}ph.hidden=true;vs.hidden=false;$('#viewport-robot-name').textContent=r.display_name;$('#viewport-state-label').textContent=r.display_name;try{await view?.loadRobot(r.id);$('#viewport-error').hidden=true}catch(e){$('#viewport-error').hidden=false;$('#viewport-error').textContent=`Robot mesh load failed: ${e.message}`;log(`Model load failed: ${e.message}`,'WARN')}renderCapabilityViews()}
 function applyLevelView(level,persist=true){const r=currentRobot(),info=buildStatus?.robots?.[r?.id];const highOk=!!(r&&info?.high_level&&r.supports_web_high_level),lowOk=!!(r&&info?.low_level);if(level==='high'&&!highOk)level=lowOk?'low':'high';settings.ui_level=level;$('#level-high').classList.toggle('active',level==='high');$('#level-low').classList.toggle('active',level==='low');if(activePage==='simulate'||activePage==='examples'){$('#high-level-view').hidden=level!=='high';$('#low-level-view').hidden=level!=='low';setWorkspaceMode(level==='low'?'low':'high')}if(persist)saveSettings().catch(e=>log(e.message,'ERROR'));if(level==='low')refreshExamples();renderSettingsSummary();return level}
 function renderCapabilityViews(){const r=currentRobot(),info=buildStatus?.robots?.[r?.id];const highOk=!!(r&&info?.high_level&&r.supports_web_high_level);$('#level-high').disabled=!highOk;$('#level-low').disabled=!(r&&info?.low_level);if(settings.ui_level==='high'&&!highOk)settings.ui_level='low';applyLevelView(settings.ui_level,false)}
@@ -88,7 +120,8 @@ async function toggleSimulation(){
   }catch(e){log(e.message,'ERROR');alert(e.message)}
 }
 
-function capability(robot){const canBuild=!!robot.model_xml;return {canBuild,hl:!!robot.supports_web_high_level,ll:!!robot.supports_low_level}}
+function capability(robot){const canBuild=!!robot.model_xml,hlConfigured=!!robot.supports_web_high_level,hl=!!(hlConfigured&&robot.high_level_ready);return {canBuild,hl,hlConfigured,ll:!!robot.supports_low_level}}
+function highLevelBadge(cap){return cap.hl?'● High-Level Pack':cap.hlConfigured?'! Policy Required':'− High-Level unavailable'}
 const FIRST_RUN_PRIMARY=['unitree_g1','unitree_go2','unitree_h1','unitree_r1'];
 function robotThumb(robot){return robot.family==='quadruped'?'quadruped':'humanoid'}
 function robotCard(robot,manager=false){
@@ -105,7 +138,7 @@ function robotCard(robot,manager=false){
     </div>
     <div class="robot-card-title"><h3>${robot.display_name.replace('Unitree ','')}</h3><small>${robot.family==='quadruped'?'Quadruped Robot':'Humanoid Robot'}</small></div>
     <div class="capability-badges">
-      <span class="capability ${cap.hl?'available':'unavailable'}">${cap.hl?'●':'−'} High-Level Pack</span>
+      <span class="capability ${cap.hl?'available':'unavailable'}">${highLevelBadge(cap)}</span>
       <span class="capability ${cap.ll?'available':'unavailable'}">${cap.ll?'●':'−'} Low-Level SDK</span>
     </div>
     <button type="button" class="robot-details-link">View Details →</button>
@@ -141,7 +174,7 @@ function robotManagerCard(robot){
     <div class="manager-card-visual"><img src="${ROBOT_PHOTOS[robot.id]||''}" alt="${robot.display_name}" loading="eager" decoding="async"></div>
     <div class="manager-card-name"><strong>${robot.display_name.replace('Unitree ','')}</strong><small>${robotTypeLabel(robot)}</small></div>
     <div class="manager-card-packages">
-      <span class="${cap.hl?'ok':'off'}">${cap.hl?'●':'○'} High-Level Pack</span>
+      <span class="${cap.hl?'ok':'off'}">${cap.hl?'● High-Level Pack':cap.hlConfigured?'! Policy Required':'○ High-Level unavailable'}</span>
       <span class="${cap.ll?'ok':'off'}">${cap.ll?'●':'○'} Low-Level SDK</span>
     </div>
     <div class="manager-card-status ${info.installed?'ready':''}"><i></i>${robotBuildStatus(info)}</div>
@@ -167,7 +200,7 @@ function renderRobotManagerDetail(robotId){
   const status=$('#robot-manager-preview-status');if(status){status.innerHTML=`<i></i> ${info.installed?'Ready':robotBuildStatus(info)}`;status.classList.toggle('ready',!!info.installed)}
   const mode=$('#robot-manager-preview-mode');if(mode)mode.textContent=cap.hl?'High Level':'Low Level';
   const control=$('#robot-manager-preview-control');if(control)control.textContent=cap.hl?'Velocity / Native':'Low-Level SDK';
-  const packages=$('#robot-manager-preview-packages');if(packages)packages.textContent=[cap.hl?'High-Level Pack':null,cap.ll?'Low-Level SDK':null].filter(Boolean).join(', ')||'No buildable packages';
+  const packages=$('#robot-manager-preview-packages');if(packages)packages.textContent=[cap.hl?'High-Level Pack':cap.hlConfigured?'High-Level Policy Required':null,cap.ll?'Low-Level SDK':null].filter(Boolean).join(', ')||'No buildable packages';
   const detail=$('#robot-manager-preview-details');if(detail)detail.onclick=()=>alert(`${robot.display_name}\n\n${robot.note||'No additional notes.'}\n\nSelected for build: ${draft.selected?'yes':'no'}`);
 }
 function updateRobotCardBuildState(){
@@ -199,7 +232,22 @@ function renderPackageSummary(){
   const managerRebuild=$('#manager-rebuild-selected');if(managerRebuild)managerRebuild.disabled=!count||!!buildStatus?.building;
   const empty=$('.overview-empty');if(empty){const strong=$('strong',empty),small=$('small',empty);if(count){strong.textContent=`${count} robot${count===1?'':'s'} selected`;small.textContent='Ready to build the selected packages.'}else{strong.textContent='No robots selected';small.textContent='Select one or more robots to see build details here.'}}
 }
-async function startBuild(){const items=selectedBuildItems();if(!items.length)return alert('Select at least one robot.');try{buildStatus=await api('/api/build/start',{method:'POST',body:JSON.stringify({robots:items})});renderBuildProgress();log(`Started selective build: ${items.map(x=>x.robot_id).join(', ')}`)}catch(e){alert(e.message)}}
+async function startBuild(){
+  const items=selectedBuildItems();
+  if(!items.length)return alert('Select at least one robot.');
+  const itemIds=items.map(x=>x.robot_id);
+  const runningId=simulationStatus?.robot_id;
+  const runningRobot=robotBy(runningId);
+  const reason=runningId&&itemIds.includes(runningId)
+    ? `Rebuild ${runningRobot?.display_name||runningId}.`
+    : 'Continue with the selected build.';
+  if(!(await stopSimulationAndContinue(reason,itemIds)))return;
+  try{
+    buildStatus=await api('/api/build/start',{method:'POST',body:JSON.stringify({robots:items})});
+    renderBuildProgress();
+    log(`Started selective build: ${items.map(x=>x.robot_id).join(', ')}`);
+  }catch(e){alert(e.message)}
+}
 async function cancelBuild(){await api('/api/build/cancel',{method:'POST'});await refreshBuildStatus()}
 async function refreshBuildStatus(){const old=buildStatus?.building;buildStatus=await api('/api/build/status');updateRobotCardBuildState();renderBuildProgress();renderInstalled();if(old&&!buildStatus.building){settings=await api('/api/settings/sync-builds',{method:'POST'});renderRobotSelect();if(installed().length){if(!settings.active_robot){settings.active_robot=installed()[0];await saveSettings()}await chooseRobot(settings.active_robot);showPage('simulate')} } }
 function pollBuilds(){clearInterval(buildTimer);buildTimer=setInterval(()=>refreshBuildStatus().catch(()=>{}),1000)}

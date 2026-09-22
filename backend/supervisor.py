@@ -4,6 +4,7 @@ from collections import deque
 from pathlib import Path
 import os
 import math
+import re
 import signal
 import subprocess
 import threading
@@ -11,6 +12,7 @@ import time
 
 from .builds import BuildManager
 from .registry import RobotRegistry
+from .policy_assets import missing_high_level_assets
 
 
 class SimulationError(RuntimeError):
@@ -32,7 +34,8 @@ class NativeSupervisor:
         sim=[str(sim_bin),'-r',str(robot.native_robot),'-s',str(scene),'-n','lo','-i','0']
         ctrl=None
         if info.get('high_level') and robot.supports_web_high_level and robot.controller_dir:
-            ctrl_bin=self.rl/robot.controller_dir/'build/g1_ctrl'
+            target = 'g1_ctrl' if robot.native_robot in {'g1','g1_23dof'} else f'{robot.native_robot}_ctrl'
+            ctrl_bin=self.rl/robot.controller_dir/'build'/target
             ctrl=[str(ctrl_bin),'--network=lo']
         return sim,ctrl
     def _env(self)->dict[str,str]:
@@ -41,11 +44,24 @@ class NativeSupervisor:
         if third.exists():
             for p in third.glob('onnxruntime*/lib'): libs.append(p)
         env['LD_LIBRARY_PATH']=':'.join(str(x) for x in libs if x.exists())+(':'+env['LD_LIBRARY_PATH'] if env.get('LD_LIBRARY_PATH') else '')
-        env['G1_SIM_RUNTIME_DIR']=str(self.runtime)
+        env['RWL_SIM_RUNTIME_DIR']=str(self.runtime)
+        env['G1_SIM_RUNTIME_DIR']=str(self.runtime)  # compatibility with the original G1 bridge
         return env
     def _collect(self,proc:subprocess.Popen[str],tag:str)->None:
         if proc.stdout is None:return
-        for line in proc.stdout:self._logs.append(f'[{tag}] {line.rstrip()}')
+        for raw in proc.stdout:
+            line=raw.rstrip()
+            self._logs.append(f'[{tag}] {line}')
+            if tag=='CTRL':
+                state=None
+                m=re.search(r'FSM:\s+Start\s+([^\s]+)',line)
+                if m: state=m.group(1)
+                m2=re.search(r'FSM:\s+Change state from\s+.+?\s+to\s+([^\s]+)',line)
+                if m2: state=m2.group(1)
+                if state:
+                    if state.startswith('Mimic_'): state='Mimic'
+                    try:(self.runtime/'fsm_state').write_text(state+'\n')
+                    except OSError:pass
     def start(self,robot_id:str)->dict:
         with self._lock:
             if self.running(): raise SimulationError('Simulation is already running')
@@ -53,7 +69,15 @@ class NativeSupervisor:
             if not info or not info.get('installed'): raise SimulationError('Build this robot before starting simulation')
             sim,ctrl=self.commands_for(robot_id)
             if not Path(sim[0]).is_file(): raise SimulationError('headless MuJoCo binary is missing; rebuild the robot pack')
-            if ctrl and not Path(ctrl[0]).is_file(): raise SimulationError('high-level controller binary is missing; rebuild the G1 HL pack')
+            if ctrl:
+                robot=self.registry.get(robot_id)
+                missing=missing_high_level_assets(self.root,robot)
+                if missing:
+                    rel=[path.relative_to(self.root).as_posix() for path in missing]
+                    raise SimulationError(
+                        f"{robot.display_name} High-Level cannot start because trained policy assets are missing: " + ", ".join(rel)
+                    )
+                if not Path(ctrl[0]).is_file(): raise SimulationError('high-level controller binary is missing; rebuild this robot High-Level pack')
             self.runtime.mkdir(parents=True,exist_ok=True)
             (self.runtime/'control_mode').write_text('HL\n' if ctrl else 'DEBUG\n')
             for name in ('request','fsm_state','web_control'):
@@ -64,7 +88,15 @@ class NativeSupervisor:
             threading.Thread(target=self._collect,args=(self._sim,'SIM'),daemon=True).start(); self._robot_id=robot_id
             time.sleep(.35)
             if self._sim.poll() is not None: raise SimulationError('MuJoCo simulator exited during startup. Check native logs.')
-            if ctrl: self._start_controller(ctrl)
+            if ctrl:
+                self._start_controller(ctrl)
+                time.sleep(.45)
+                if self._ctrl is None or self._ctrl.poll() is not None:
+                    recent='\n'.join([line for line in self._logs if line.startswith('[CTRL]')][-12:])
+                    self._terminate(self._sim); self._sim=None
+                    self._ctrl=None
+                    self._clear_runtime_files()
+                    raise SimulationError('High-Level controller exited during startup.' + (f"\n{recent}" if recent else ''))
             threading.Thread(target=self._watch_runtime_requests,daemon=True).start()
             return self.status()
     def _start_controller(self,cmd:list[str]|None=None)->None:

@@ -10,6 +10,7 @@ import threading
 from typing import Any
 
 from .registry import RobotRegistry
+from .policy_assets import missing_high_level_assets
 
 
 class BuildBusyError(RuntimeError):
@@ -66,6 +67,14 @@ class BuildManager:
             seen.add(rid); high=bool(item.get("high_level",False)); low=bool(item.get("low_level",False))
             if not high and not low: raise ValueError(f"Select at least one package for {robot.display_name}")
             if high and not robot.supports_web_high_level: raise ValueError(f"{robot.display_name} High-Level web control is not enabled in this release")
+            if high:
+                missing = missing_high_level_assets(self.project_root, robot)
+                if missing:
+                    rel = [path.relative_to(self.project_root).as_posix() for path in missing]
+                    raise ValueError(
+                        f"{robot.display_name} High-Level controller exists, but required trained policy assets are missing: "
+                        + ", ".join(rel)
+                    )
             if low and not robot.supports_low_level: raise ValueError(f"{robot.display_name} has no compatible low-level SDK pack in this pinned revision")
             if not robot.model_xml: raise ValueError(f"{robot.display_name} has no supported simulation model in this pinned revision")
             clean.append({"robot_id":rid,"high_level":high,"low_level":low})

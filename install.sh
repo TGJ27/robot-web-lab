@@ -128,14 +128,13 @@ fi
 
 if [[ "${RWL_SKIP_SUBMODULES:-0}" != "1" ]]; then
   command -v git >/dev/null 2>&1 || die "git is required to fetch pinned Unitree dependencies."
-  if [[ ! -d .git ]]; then
-    say "Initializing Git metadata from the ZIP distribution"
-    ./scripts/init_git_repo.sh
-  fi
-  say "Fetching pinned Unitree submodules"
-  ./scripts/bootstrap_submodules.sh
+  say "Fetching pinned Unitree dependencies"
+  # Run through bash so source archives/ZIPs do not depend on the executable bit
+  # being preserved by the extraction tool. bootstrap_submodules.sh supports
+  # both a normal Git clone and a source tree without .git metadata.
+  bash "$ROOT/scripts/bootstrap_submodules.sh"
 else
-  say "Skipping Unitree submodules because RWL_SKIP_SUBMODULES=1"
+  say "Skipping Unitree dependencies because RWL_SKIP_SUBMODULES=1"
 fi
 
 # Native packages are prepared last. No robot binaries are built here.

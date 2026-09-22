@@ -42,10 +42,18 @@ class ModelService:
         path=self.visual_model_path(robot_id); tree=ET.parse(path); root=tree.getroot()
         compiler=root.find("compiler"); meshdir=Path(compiler.get("meshdir","")) if compiler is not None else Path()
         meshes={}
+        materials={}
         asset=root.find("asset")
         if asset is not None:
+            for material in asset.findall("material"):
+                name=material.get("name")
+                if name:
+                    materials[name]=_vec(material.get("rgba"),4,[0.72,0.74,0.78,1])
             for mesh in asset.findall("mesh"):
-                name=mesh.get("name"); filename=mesh.get("file")
+                filename=mesh.get("file")
+                # MuJoCo defaults an unnamed mesh asset to the source filename stem.
+                # Go2's pinned MJCF relies on that behavior (e.g. base_0.obj -> base_0).
+                name=mesh.get("name") or (Path(filename).stem if filename else None)
                 if name and filename:
                     rel=(meshdir/filename).as_posix(); meshes[name]={"asset":rel,"scale":_vec(mesh.get("scale"),3,[1,1,1])}
 
@@ -59,7 +67,7 @@ class ModelService:
                 mesh_name=g.get("mesh")
                 if not mesh_name or mesh_name not in meshes: continue
                 m=meshes[mesh_name]
-                geoms.append({"mesh":mesh_name,"asset":m["asset"],"scale":m["scale"],"pos":_vec(g.get("pos"),3,[0,0,0]),"quat":_vec(g.get("quat"),4,[1,0,0,0]),"rgba":_vec(g.get("rgba"),4,[0.72,0.74,0.78,1])})
+                geoms.append({"mesh":mesh_name,"asset":m["asset"],"scale":m["scale"],"pos":_vec(g.get("pos"),3,[0,0,0]),"quat":_vec(g.get("quat"),4,[1,0,0,0]),"rgba":_vec(g.get("rgba"),4,materials.get(g.get("material",""),[0.72,0.74,0.78,1]))})
             return {"name":node.get("name","body"),"pos":_vec(node.get("pos"),3,[0,0,0]),"quat":_vec(node.get("quat"),4,[1,0,0,0]),"joint":joint,"geoms":geoms,"children":[parse_body(b) for b in node.findall("body")]}
 
         world=root.find("worldbody")

@@ -14,6 +14,24 @@ def test_supervisor_builds_robot_specific_sim_command(tmp_path: Path):
     assert ctrl[-1]=='--network=lo'
 
 
+
+def test_supervisor_uses_robot_specific_high_level_controller_binary(tmp_path: Path):
+    registry=RobotRegistry.default(); manager=BuildManager(tmp_path/'workspace/build_state.json',registry,project_root=tmp_path)
+    expected={
+        'unitree_g1':'g1_ctrl',
+        'unitree_g1_23dof':'g1_ctrl',
+        'unitree_go2':'go2_ctrl',
+        'unitree_h1':'h1_2_ctrl',
+        'unitree_a2':'a2_ctrl',
+        'unitree_r1':'r1_ctrl',
+    }
+    sup=NativeSupervisor(tmp_path,registry,manager)
+    for rid,target in expected.items():
+        manager.mark_installed(rid,high_level=True,low_level=registry.get(rid).supports_low_level)
+        _,ctrl=sup.commands_for(rid)
+        assert ctrl is not None
+        assert Path(ctrl[0]).name == target
+
 def test_ll_only_robot_has_no_controller_command(tmp_path: Path):
     registry=RobotRegistry.default(); manager=BuildManager(tmp_path/'workspace/build_state.json',registry,project_root=tmp_path)
     manager.mark_installed('unitree_go2',high_level=False,low_level=True)

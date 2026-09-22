@@ -46,15 +46,41 @@ def main()->int:
 
     env=os.environ.copy(); lib=str(prefix/"lib"); inc=str(prefix/"include")
     env["CMAKE_PREFIX_PATH"]=f"{prefix}:{prefix/'lib/cmake'}:"+env.get("CMAKE_PREFIX_PATH","")
-    env["CPATH"]=inc+(":"+env["CPATH"] if env.get("CPATH") else "")
+    # Keep native controller builds deterministic. In particular, rl_mjlab has
+    # both simulate/src/param.h and deploy/include/param.h; inherited CPATH or
+    # CPLUS_INCLUDE_PATH entries can make a controller pick the simulator header.
+    env["CPATH"]=inc
+    env.pop("CPLUS_INCLUDE_PATH",None)
+    env.pop("C_INCLUDE_PATH",None)
     env["LIBRARY_PATH"]=lib+(":"+env["LIBRARY_PATH"] if env.get("LIBRARY_PATH") else "")
     env["LD_LIBRARY_PATH"]=lib+(":"+env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
 
-    # Apply the proven G1 keyboard/LL/Mimic/hanger patch only when the G1 HL pack is requested.
+    # Normalize upstream deploy controller sources before any High-Level build.
+    # The pinned revision uses C++17 features but some robot CMakeLists do not
+    # request C++17, and it contains two different headers named param.h.
+    if any(i.get("high_level") for i in items):
+        run([sys.executable,str(root/"scripts/apply_rl_mjlab_compat_patch.py"),str(rl)])
+
+    # G1 keeps its simulator keyboard/Mimic/hanger integration.  Other robots
+    # do not need the G1-specific source edits.
     g1_hl=any(i["robot_id"]=="unitree_g1" and i.get("high_level") for i in items)
     if g1_hl:
-        event("unitree_g1",status="building",progress=20,stage="Applying validated G1 HL/LL + Mimic fixes")
+        event("unitree_g1",status="building",progress=18,stage="Applying G1 simulator/Mimic integration")
         run([sys.executable,str(root/"scripts/apply_g1_patch.py"),str(rl)])
+
+    g1_23_mimic=any(i["robot_id"]=="unitree_g1_23dof" and i.get("high_level") for i in items)
+    if g1_23_mimic:
+        event("unitree_g1_23dof",status="building",progress=19,stage="Applying G1 23DoF Mimic stability fixes")
+        run([sys.executable,str(root/"scripts/apply_g1_23dof_mimic_patch.py"),str(rl)])
+
+    # Every rl_mjlab High-Level controller gets the same controller-side web
+    # joystick overlay.  This is what makes 1/2/3 + WASDQE from the browser
+    # work for G1-23DoF, Go2, H1-2, A2 and R1 as well as G1.
+    if any(i.get("high_level") for i in items):
+        for item in items:
+            if item.get("high_level"):
+                event(item["robot_id"],status="building",progress=22,stage="Applying multi-robot web keyboard control")
+        run([sys.executable,str(root/"scripts/apply_web_hl_patch.py"),str(rl)])
 
     # Robot-agnostic qpos bridge for the browser viewport.
     run([sys.executable,str(root/"scripts/apply_web_state_patch.py"),str(rl)])
@@ -65,19 +91,76 @@ def main()->int:
     run(["cmake","-S",str(rl/"simulate"),"-B",str(sim_build),"-DCMAKE_BUILD_TYPE=Release",f"-DCMAKE_PREFIX_PATH={prefix};{prefix/'lib/cmake'}"],env=env)
     run(["cmake","--build",str(sim_build),"--target","rwl_mujoco_headless","-j",jobs],env=env)
 
-    # Build only web-enabled selected HL controllers. That is intentionally G1 only in the current integration.
+    # Sanity-check the pinned deploy header before controller compilation. The
+    # upstream State_RLBase.cpp files require param::parser_policy_dir().
+    deploy_param=rl/"deploy/include/param.h"
+    try:
+        deploy_param_text=deploy_param.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(f"Missing rl_mjlab deploy header: {deploy_param}") from exc
+    if "parser_policy_dir" not in deploy_param_text:
+        raise RuntimeError(
+            "unitree_rl_mjlab tracked sources are stale/modified: deploy/include/param.h "
+            "does not contain parser_policy_dir. Run: bash scripts/bootstrap_submodules.sh"
+        )
+
+    # Refuse to advertise/build a runnable HL pack when upstream did not ship
+    # the trained policy assets required by that controller.  The upstream
+    # CtrlFSM constructs every enabled state at startup, so a missing Velocity
+    # or Mimic policy prevents the controller from reaching Passive at all.
+    required_hl_assets={
+        "unitree_g1": [
+            "deploy/robots/g1/config/policy/velocity/v0/exported/policy.onnx",
+            "deploy/robots/g1/config/policy/mimic/dance1_subject2/exported/policy.onnx",
+            "deploy/robots/g1/config/policy/mimic/dance1_subject2/params/dance1_subject2.npz",
+        ],
+        "unitree_g1_23dof": [
+            "deploy/robots/g1_23dof/config/policy/velocity/v0/exported/policy.onnx",
+            "deploy/robots/g1_23dof/config/policy/mimic/dance1_subject2/exported/policy.onnx",
+            "deploy/robots/g1_23dof/config/policy/mimic/dance1_subject2/params/dance1_subject2.npz",
+        ],
+        "unitree_go2": ["deploy/robots/go2/config/policy/velocity/v0/exported/policy.onnx"],
+        "unitree_h1": ["deploy/robots/h1_2/config/policy/velocity/v0/exported/policy.onnx"],
+        "unitree_a2": ["deploy/robots/a2/config/policy/velocity/v0/exported/policy.onnx"],
+        "unitree_r1": ["deploy/robots/r1/config/policy/velocity/v0/exported/policy.onnx"],
+    }
+    for item in items:
+        if not item.get("high_level"):
+            continue
+        missing=[rel for rel in required_hl_assets.get(item["robot_id"],[]) if not (rl/rel).is_file()]
+        if missing:
+            raise RuntimeError(
+                f"{item['robot_id']} has an upstream HL controller/config, but no runnable trained policy bundle. Missing: "
+                + ", ".join(missing)
+            )
+
+    # Build the selected upstream rl_mjlab controller target for each robot.
+    # H2 is intentionally absent: the pinned rl_mjlab revision has no deploy/robots/h2 controller.
+    controller_targets={
+        "unitree_g1": ("g1", "g1_ctrl", "G1"),
+        "unitree_g1_23dof": ("g1_23dof", "g1_ctrl", "G1 23DoF"),
+        "unitree_go2": ("go2", "go2_ctrl", "Go2"),
+        "unitree_h1": ("h1_2", "h1_2_ctrl", "H1-2"),
+        "unitree_a2": ("a2", "a2_ctrl", "A2"),
+        "unitree_r1": ("r1", "r1_ctrl", "R1"),
+    }
     for item in items:
         rid=item["robot_id"]
         if item.get("high_level"):
-            if rid!="unitree_g1": raise RuntimeError(f"Web HL controller is not enabled for {rid}")
-            ctrl=rl/"deploy/robots/g1"; build=ctrl/"build"
-            event(rid,status="building",progress=58,stage="Configuring G1 high-level controller")
-            cxx=f"-I{prefix/'include'}"
+            try:
+                ctrl_dir,target,label=controller_targets[rid]
+            except KeyError as exc:
+                raise RuntimeError(f"No web High-Level controller target is configured for {rid}") from exc
+            ctrl=rl/"deploy/robots"/ctrl_dir; build=ctrl/"build"
+            event(rid,status="building",progress=58,stage=f"Configuring {label} high-level controller")
+            # Explicitly put deploy/include first so "param.h" cannot resolve to
+            # simulate/src/param.h or another environment-provided header.
+            cxx=f"-I{rl/'deploy/include'} -I{prefix/'include'}"
             link=f"-L{prefix/'lib'} -Wl,-rpath,{prefix/'lib'}"
-            run(["cmake","-S",str(ctrl),"-B",str(build),"-DCMAKE_BUILD_TYPE=Release",f"-DCMAKE_CXX_FLAGS={cxx}",f"-DCMAKE_EXE_LINKER_FLAGS={link}"],env=env)
-            event(rid,status="building",progress=72,stage="Building G1 high-level controller")
-            run(["cmake","--build",str(build),"--target","g1_ctrl","-j",jobs],env=env)
-            if not (build/"g1_ctrl").exists(): raise RuntimeError("g1_ctrl binary was not produced")
+            run(["cmake","-S",str(ctrl),"-B",str(build),"-DCMAKE_BUILD_TYPE=Release","-DCMAKE_CXX_STANDARD=17","-DCMAKE_CXX_STANDARD_REQUIRED=ON",f"-DCMAKE_CXX_FLAGS={cxx}",f"-DCMAKE_EXE_LINKER_FLAGS={link}"],env=env)
+            event(rid,status="building",progress=72,stage=f"Building {label} high-level controller")
+            run(["cmake","--build",str(build),"--target",target,"-j",jobs],env=env)
+            if not (build/target).exists(): raise RuntimeError(f"{target} binary was not produced")
         if item.get("low_level"):
             event(rid,status="building",progress=86,stage="Registering low-level SDK pack (examples build on demand)")
         event(rid,status="installed",progress=100,stage="Ready")

@@ -26,3 +26,16 @@ def test_scene_include_uses_included_robot_model_for_browser_manifest(tmp_path: 
     mf=svc.manifest('r')
     assert mf['bodies'][0]['name']=='base'
     assert svc.asset_path('r','meshes/body.STL').is_file()
+
+
+def test_unnamed_obj_mesh_uses_filename_stem_and_material_color(tmp_path: Path):
+    project=tmp_path/'project'; repo=project/'third_party/unitree_rl_mjlab'; model=repo/'models/go2.xml'; assets=repo/'models/assets'; assets.mkdir(parents=True)
+    (assets/'base_0.obj').write_text('v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n')
+    model.write_text('''<mujoco><compiler meshdir="assets"/><asset><material name="black" rgba="0 0 0 1"/><mesh file="base_0.obj"/></asset><worldbody><body name="base"><geom mesh="base_0" material="black"/></body></worldbody></mujoco>''')
+    registry=RobotRegistry([RobotDefinition('go2','Go2','quadruped','example',12,True,native_robot='go2',model_xml='models/go2.xml')])
+    svc=ModelService(project,registry)
+    mf=svc.manifest('go2')
+    geom=mf['bodies'][0]['geoms'][0]
+    assert geom['asset']=='assets/base_0.obj'
+    assert geom['rgba']==[0.0,0.0,0.0,1.0]
+    assert svc.asset_path('go2','assets/base_0.obj').is_file()

@@ -3,6 +3,29 @@ import { STLLoader } from './vendor/STLLoader.js';
 
 function quatFromWXYZ(q){ return new THREE.Quaternion(q[1]||0,q[2]||0,q[3]||0,q[0] ?? 1); }
 
+function objIndex(raw,count){ const i=Number.parseInt(raw,10); return Number.isFinite(i) ? (i<0 ? count+i : i-1) : -1; }
+function parseObjGeometry(text){
+  const vertices=[],normals=[],positions=[],outNormals=[];
+  for(const raw of text.split(/\r?\n/)){
+    const line=raw.trim(); if(!line||line.startsWith('#'))continue;
+    const parts=line.split(/\s+/), tag=parts[0];
+    if(tag==='v'&&parts.length>=4)vertices.push([+parts[1],+parts[2],+parts[3]]);
+    else if(tag==='vn'&&parts.length>=4)normals.push([+parts[1],+parts[2],+parts[3]]);
+    else if(tag==='f'&&parts.length>=4){
+      const face=parts.slice(1).map(token=>{const p=token.split('/');return {v:objIndex(p[0],vertices.length),n:p[2]?objIndex(p[2],normals.length):-1}});
+      for(let i=1;i<face.length-1;i++)for(const ref of [face[0],face[i],face[i+1]]){
+        const v=vertices[ref.v]; if(!v)continue; positions.push(...v);
+        const n=normals[ref.n]; if(n)outNormals.push(...n);
+      }
+    }
+  }
+  const geometry=new THREE.BufferGeometry();
+  geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  if(outNormals.length===positions.length)geometry.setAttribute('normal',new THREE.Float32BufferAttribute(outNormals,3));
+  else geometry.computeVertexNormals();
+  return geometry;
+}
+
 export class UnitreeModelView {
   constructor(container){
     this.container=container; this.scene=new THREE.Scene(); this.camera=new THREE.PerspectiveCamera(42,1,.02,100);
@@ -24,7 +47,14 @@ export class UnitreeModelView {
     for(const geom of node.geoms||[]){
       const holder=new THREE.Group(); holder.position.fromArray(geom.pos||[0,0,0]); holder.quaternion.copy(quatFromWXYZ(geom.quat||[1,0,0,0])); group.add(holder);
       const url=`/api/model/${encodeURIComponent(robotId)}/asset?path=${encodeURIComponent(geom.asset)}`;
-      const job=new Promise((resolve)=>this.loader.load(url,(geometry)=>{ geometry.computeVertexNormals(); const rgba=geom.rgba||[.72,.74,.78,1]; const mat=new THREE.MeshStandardMaterial({color:new THREE.Color(rgba[0],rgba[1],rgba[2]),roughness:.55,metalness:.18,transparent:rgba[3]<.999,opacity:rgba[3]}); const mesh=new THREE.Mesh(geometry,mat); mesh.scale.fromArray(geom.scale||[1,1,1]); mesh.castShadow=true;mesh.receiveShadow=true;holder.add(mesh);resolve();},undefined,()=>resolve())); jobs.push(job);
+      const addMesh=(geometry)=>{ geometry.computeVertexNormals(); const rgba=geom.rgba||[.72,.74,.78,1]; const mat=new THREE.MeshStandardMaterial({color:new THREE.Color(rgba[0],rgba[1],rgba[2]),roughness:.55,metalness:.18,transparent:rgba[3]<.999,opacity:rgba[3]}); const mesh=new THREE.Mesh(geometry,mat); mesh.scale.fromArray(geom.scale||[1,1,1]); mesh.castShadow=true;mesh.receiveShadow=true;holder.add(mesh); };
+      let job;
+      if(String(geom.asset||'').toLowerCase().endsWith('.obj')){
+        job=fetch(url).then(r=>{if(!r.ok)throw new Error(`OBJ asset failed: ${r.status}`);return r.text()}).then(t=>addMesh(parseObjGeometry(t))).catch(()=>{});
+      }else{
+        job=new Promise((resolve)=>this.loader.load(url,(geometry)=>{addMesh(geometry);resolve();},undefined,()=>resolve()));
+      }
+      jobs.push(job);
     }
     for(const child of node.children||[]) group.add(this._body(child,robotId,jobs)); return group;
   }

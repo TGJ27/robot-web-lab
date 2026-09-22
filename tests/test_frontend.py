@@ -71,3 +71,18 @@ def test_build_card_selection_is_kept_outside_polled_dom_renders():
     assert 'buildSelections.setSelected' in app
     assert 'buildSelections.setPack' in app
     assert 'return buildSelections.selectedItems()' in app
+
+
+def test_frontend_distinguishes_controller_support_from_missing_policy_assets():
+    js = text("frontend/app.js")
+    assert "high_level_ready" in js
+    assert "Policy Required" in js
+
+
+def test_frontend_prompts_before_switching_or_rebuilding_running_robot():
+    js = text("frontend/app.js")
+    assert "stopSimulationAndContinue" in js
+    assert "Stop running simulation?" in js
+    assert "Stop & Continue" in js
+    assert "Switch to ${target?.display_name||id}." in js
+    assert "itemIds.includes(runningId)" in js
