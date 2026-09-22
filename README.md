@@ -41,7 +41,7 @@ A normal installation needs internet access once to fetch the Git submodules, Py
 Clone with submodules:
 
 ```bash
-git clone --recurse-submodules https://github.com/YOUR_USERNAME/robot-web-lab.git
+git clone --recurse-submodules https://github.com/TGJ27/robot-web-lab.git
 cd robot-web-lab
 ./install.sh
 ```
