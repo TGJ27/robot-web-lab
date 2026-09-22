@@ -39,3 +39,10 @@ def test_unnamed_obj_mesh_uses_filename_stem_and_material_color(tmp_path: Path):
     assert geom['asset']=='assets/base_0.obj'
     assert geom['rgba']==[0.0,0.0,0.0,1.0]
     assert svc.asset_path('go2','assets/base_0.obj').is_file()
+
+
+def test_g1_23dof_only_exposes_ankle_swing_low_level_example():
+    robot = RobotRegistry.default().get("unitree_g1_23dof")
+    assert robot.supports_low_level is True
+    assert robot.sdk_example_path == "example/g1/low_level"
+    assert robot.sdk_example_files == ("g1_ankle_swing_example.cpp",)

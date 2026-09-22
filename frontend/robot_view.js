@@ -64,7 +64,8 @@ export class UnitreeModelView {
       if(state.base_quaternion)this.floatingRoot.quaternion.copy(quatFromWXYZ(state.base_quaternion));
       const local=new THREE.Vector3(...state.base_position);
       const worldTarget=local.clone().applyQuaternion(this.world.quaternion).add(this.world.position);
-      worldTarget.y+=.82;
+      // The floating base is the robot's body center (pelvis/trunk).
+      // Follow it directly instead of biasing the camera toward the head/top.
       if(this.followEnabled){ this.target.copy(worldTarget); this._positionCamera(); }
     }
     const q=state?.joint_positions||[]; this.joints.forEach((j,i)=>{ const rot=new THREE.Quaternion().setFromAxisAngle(j.axis,q[i]||0); j.group.quaternion.copy(j.base).multiply(rot); });

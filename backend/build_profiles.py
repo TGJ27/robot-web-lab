@@ -58,8 +58,10 @@ class BuildProfileStore:
             },
             "files": {
                 "unitree_g1:builtin:g1_dual_arm_example.cpp": "g1_dual_arm",
+                "unitree_g1_23dof:builtin:g1_dual_arm_example.cpp": "g1_dual_arm",
                 "unitree_h2:builtin:h2_dual_arm_example.cpp": "h2_dual_arm",
                 "unitree_g1:builtin:terminations.cpp": "terminations",
+                "unitree_g1_23dof:builtin:terminations.cpp": "terminations",
                 "unitree_h2:builtin:terminations.cpp": "terminations",
             },
         }

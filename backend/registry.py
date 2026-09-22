@@ -47,6 +47,7 @@ class RobotRegistry:
             ),
             RobotDefinition(
                 "unitree_g1_23dof", "Unitree G1 23DoF", "humanoid", "example/g1/low_level", 23, True,
+                sdk_example_files=("g1_ankle_swing_example.cpp",),
                 native_robot="g1_23dof", controller_dir="deploy/robots/g1_23dof",
                 model_xml="src/assets/robots/unitree_g1/xmls/scene_g1_23dof.xml",
                 supports_web_high_level=True, supports_mimic=True,

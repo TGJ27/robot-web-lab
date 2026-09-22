@@ -43,3 +43,24 @@ def test_default_yaml_contains_builtin_profile_assignments(tmp_path: Path):
     assert "unitree_h2:builtin:h2_dual_arm_example.cpp: h2_dual_arm" in text
     assert "unitree_g1:builtin:terminations.cpp: terminations" in text
     assert store.assign_builtin("unitree_g1", "g1_dual_arm_example.cpp") == "g1_dual_arm"
+
+
+def test_g1_23dof_shared_low_level_examples_get_special_profiles(tmp_path):
+    store = BuildProfileStore(tmp_path / "profiles.yaml")
+    dual = store.resolve_profile(
+        "unitree_g1_23dof",
+        "g1_dual_arm_example.cpp",
+        builtin=True,
+        source_path=tmp_path / "g1_dual_arm_example.cpp",
+    )
+    assert "unitree_sdk2" in dual["libraries"]
+    assert "yaml-cpp" in dual["libraries"]
+    assert dual["defines"]["BLIB_DIR"] == "${SDK_EXAMPLE_ROOT}/behavior_lib/"
+
+    term = store.resolve_profile(
+        "unitree_g1_23dof",
+        "terminations.cpp",
+        builtin=True,
+        source_path=tmp_path / "terminations.cpp",
+    )
+    assert "Boost::program_options" in term["libraries"]

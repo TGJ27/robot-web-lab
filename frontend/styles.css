@@ -408,3 +408,66 @@
 @media(max-width:1100px){.workspace.mode-robots{height:auto;overflow:visible}.robots-view-full{overflow:visible}.robots-manager-shell{grid-template-columns:1fr;overflow:visible}.robot-preview-panel{grid-template-columns:260px 1fr;grid-template-rows:auto auto}.robot-preview-panel>.section-heading{grid-column:1/-1}.robot-preview-stage{min-height:330px}.robot-preview-meta{align-self:center}.build-overview-panel{align-self:stretch}.robot-manager-grid{grid-template-columns:repeat(3,minmax(130px,1fr))}.environment-detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:720px){.robots-build-header{align-items:flex-start;flex-direction:column}.robot-preview-panel{display:block}.robot-manager-grid{grid-template-columns:repeat(2,minmax(120px,1fr))}.environment-detail-grid{grid-template-columns:1fr}}
 .robot-card-photo{object-fit:contain;padding:5px}.robot-card-photo-frame{background:linear-gradient(145deg,color-mix(in srgb,var(--panel3) 86%,#cfe3f7),var(--panel))}
+
+
+/* ==========================================================================
+   RWL UI workspace patch 2026-09-22
+   Side-collapse work panels + true step-by-step first-run setup.
+   ========================================================================== */
+
+.setup-wizard-page{display:flex;flex-direction:column;gap:10px;min-height:0}
+.setup-wizard-page[hidden]{display:none!important}
+.setup-step.completed b{background:var(--green);border-color:var(--green);color:#fff}
+.setup-step.completed strong{color:var(--green)}
+.wizard-actions{border-top:1px solid var(--line);padding-top:10px;margin-top:2px}
+.wizard-actions .wizard-next,.wizard-actions .build-selected-large{margin-left:0}
+.setup-review-card{margin:0 10px;padding:14px 16px;border:1px solid var(--line);border-radius:9px;background:var(--panel);display:flex;align-items:center;justify-content:space-between;gap:18px}
+.setup-review-card h3{margin:2px 0 0;font-size:17px}
+#setup-review-summary{color:var(--muted);font-size:11px;line-height:1.5;text-align:right;max-width:62%}
+
+.workspace.mode-low:not(.editor-focus):not(.editor-maximized){
+  --ll-examples-track:var(--ll-examples-width);
+  --ll-editor-track:var(--ll-editor-width);
+  --ll-terminal-track:var(--ll-terminal-height);
+  grid-template-columns:var(--ll-examples-track) 6px minmax(320px,1fr) 6px var(--ll-editor-track);
+  grid-template-rows:minmax(0,1fr) 6px var(--ll-terminal-track);
+  grid-template-areas:
+    "lowexamples lowleftsplit viewport      lowrightsplit lowright"
+    "lowexamples lowleftsplit lowtermsplit lowrightsplit lowright"
+    "lowexamples lowleftsplit console       lowrightsplit lowright";
+}
+.workspace.mode-low.ll-examples-collapsed:not(.editor-focus):not(.editor-maximized){--ll-examples-track:44px}
+.workspace.mode-low.ll-editor-collapsed:not(.editor-focus):not(.editor-maximized){--ll-editor-track:44px}
+.workspace.mode-low.console-collapsed:not(.editor-focus):not(.editor-maximized){--ll-terminal-track:44px}
+
+.workspace.mode-low.ll-examples-collapsed #ll-examples-panel>summary,
+.workspace.mode-low.ll-editor-collapsed #ll-editor-panel>summary{
+  height:100%;min-height:0;padding:10px 8px;justify-content:center;gap:8px;
+  writing-mode:vertical-rl;transform:rotate(180deg);white-space:nowrap;border:0
+}
+.workspace.mode-low.ll-examples-collapsed #ll-examples-panel>summary:after,
+.workspace.mode-low.ll-editor-collapsed #ll-editor-panel>summary:after{transform:none!important}
+.workspace.mode-low.ll-examples-collapsed #ll-left-splitter:after,
+.workspace.mode-low.ll-editor-collapsed #ll-right-splitter:after{opacity:.35}
+
+.workspace.mode-high{
+  --high-panel-track:minmax(390px,.9fr);
+  --high-console-track:var(--high-console-height);
+  grid-template-columns:minmax(600px,1.6fr) var(--high-panel-track);
+  grid-template-rows:minmax(0,1fr) var(--high-console-track);
+}
+.workspace.mode-high.console-collapsed{--high-console-track:44px}
+.workspace.mode-high.high-panel-collapsed{--high-panel-track:44px}
+.workspace.mode-high.high-panel-collapsed #high-level-view{overflow:hidden!important;padding:0}
+.workspace.mode-high.high-panel-collapsed #high-level-view>details{display:none!important}
+.workspace.mode-high.high-panel-collapsed .control-panel-heading{height:100%;padding:0;justify-content:center}
+.workspace.mode-high.high-panel-collapsed .control-panel-heading>div{display:none}
+.workspace.mode-high.high-panel-collapsed #high-level-panel-toggle{width:100%;height:100%;padding:0;border:0;border-radius:8px;background:var(--panel);color:var(--blue);font-size:20px}
+
+@media(max-width:1550px) and (min-width:1051px){.workspace.mode-high{grid-template-columns:minmax(520px,1.45fr) var(--high-panel-track)}}
+@media(max-width:1150px){
+  #setup-review-summary{max-width:none;text-align:left}
+  .setup-review-card{align-items:flex-start;flex-direction:column}
+  .workspace.mode-low.ll-examples-collapsed #ll-examples-panel>summary,
+  .workspace.mode-low.ll-editor-collapsed #ll-editor-panel>summary{height:auto;writing-mode:horizontal-tb;transform:none;justify-content:space-between}
+}

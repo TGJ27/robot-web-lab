@@ -86,3 +86,14 @@ def test_headless_bridge_is_destroyed_before_mujoco_data(tmp_path):
     script=Path('scripts/apply_web_state_patch.py').read_text()
     assert 'bridge.reset();' in script
     assert script.index('bridge.reset();') < script.index('mj_deleteData(d)')
+
+
+def test_native_builder_prebuilds_exposed_low_level_examples():
+    source=(ROOT/'scripts/native_build.py').read_text()
+    assert 'def build_low_level_examples(' in source
+    assert 'ExampleService' in source
+    assert 'LowLevelRunner' in source
+    assert 'BuildProfileStore' in source
+    assert 'builtin=True' in source
+    assert 'stage="Building Low-Level SDK examples"' in source
+    assert 'examples build on demand' not in source

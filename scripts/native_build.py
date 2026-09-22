@@ -25,6 +25,67 @@ def run(cmd:list[str], *, cwd:Path|None=None, env:dict[str,str]|None=None) -> No
     if code: raise RuntimeError(f"command failed ({code}): {' '.join(cmd)}")
 
 
+
+def build_low_level_examples(root: Path, sdk: Path, prefix: Path, robot_id: str) -> int:
+    # Pre-build every simulator-compatible built-in LL example exposed for a robot.
+    # SDK2 itself still uses BUILD_EXAMPLES=OFF; only Robot Web Lab's approved
+    # per-robot examples are compiled here using the same path as the web IDE.
+    root_s = str(root)
+    if root_s not in sys.path:
+        sys.path.insert(0, root_s)
+
+    from backend.build_profiles import BuildProfileStore
+    from backend.examples import ExampleService
+    from backend.registry import RobotRegistry
+    from backend.runner import LowLevelRunner
+
+    registry = RobotRegistry.default()
+    robot = registry.get(robot_id)
+    if not robot.supports_low_level:
+        return 0
+
+    workspace = root / "workspace" / "examples"
+    profiles = BuildProfileStore(root / "workspace" / "build_profiles.yaml")
+    examples = ExampleService(sdk, workspace, registry)
+    runner = LowLevelRunner(
+        workspace,
+        sdk,
+        owner=lambda: "low",
+        sdk_prefix=prefix,
+        registry=registry,
+        profile_store=profiles,
+    )
+
+    entries = examples.list_examples(robot_id)
+    if not entries:
+        print(
+            f"No simulator-compatible Low-Level examples exposed for {robot.display_name}.",
+            flush=True,
+        )
+        return 0
+
+    built = 0
+    for entry in entries:
+        source = examples.builtin_path(robot_id, entry.relative_path)
+        print(f"[LL example] {robot.display_name}: {entry.relative_path}", flush=True)
+        ok, output = runner.build(
+            source,
+            robot_id=robot_id,
+            relative_path=entry.relative_path,
+            builtin=True,
+        )
+        if output.strip():
+            print(output.rstrip(), flush=True)
+        if not ok:
+            raise RuntimeError(
+                f"Low-Level example failed to build for {robot.display_name}: "
+                f"{entry.relative_path}"
+            )
+        built += 1
+
+    print(f"Built {built} Low-Level example(s) for {robot.display_name}.", flush=True)
+    return built
+
 def main()->int:
     ap=argparse.ArgumentParser(); ap.add_argument("--project-root",required=True); ap.add_argument("--request",required=True); ns=ap.parse_args()
     root=Path(ns.project_root).resolve(); items=json.loads(Path(ns.request).read_text()); ids=[i["robot_id"] for i in items]
@@ -34,7 +95,7 @@ def main()->int:
         raise SystemExit("Pinned Unitree submodules are missing. Run ./scripts/bootstrap_submodules.sh")
     for rid in ids: event(rid,status="building",progress=4,stage="Checking native dependencies")
 
-    # Build/install SDK2 core only. BUILD_EXAMPLES=OFF is deliberate: LL examples compile on demand in the web IDE.
+    # Build/install SDK2 core only. BUILD_EXAMPLES=OFF avoids the entire upstream example tree; selected Robot Web Lab LL examples are compiled per robot later.
     sdk_build=native/"sdk2-build"; sdk_config=prefix/"lib/cmake/unitree_sdk2/unitree_sdk2Config.cmake"
     if not sdk_config.exists():
         for rid in ids: event(rid,status="building",progress=10,stage="Preparing Unitree SDK2 core (examples disabled)")
@@ -162,7 +223,9 @@ def main()->int:
             run(["cmake","--build",str(build),"--target",target,"-j",jobs],env=env)
             if not (build/target).exists(): raise RuntimeError(f"{target} binary was not produced")
         if item.get("low_level"):
-            event(rid,status="building",progress=86,stage="Registering low-level SDK pack (examples build on demand)")
+            event(rid,status="building",progress=84,stage="Building Low-Level SDK examples")
+            count=build_low_level_examples(root,sdk,prefix,rid)
+            event(rid,status="building",progress=96,stage=f"Low-Level examples ready ({count} built)")
         event(rid,status="installed",progress=100,stage="Ready")
     print("Selective native build complete.",flush=True); return 0
 

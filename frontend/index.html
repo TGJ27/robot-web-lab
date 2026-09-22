@@ -71,43 +71,67 @@
           <span class="setup-chip"><b>01</b> First-Run Setup</span>
         </div>
 
-        <div class="setup-steps">
-          <div class="setup-step active"><b>1</b><strong>Select Robots</strong><span>Choose one or more robots to build</span></div>
-          <div class="setup-step"><b>2</b><strong>Select Packages</strong><span>Choose control packs to install</span></div>
-          <div class="setup-step"><b>3</b><strong>Build</strong><span>We'll set up the environment for you</span></div>
+        <div class="setup-steps" role="list" aria-label="Setup progress">
+          <div class="setup-step active" data-setup-step="1" role="listitem"><b>1</b><strong>Select Robots</strong><span>Choose one or more robots to build</span></div>
+          <div class="setup-step" data-setup-step="2" role="listitem"><b>2</b><strong>Select Packages</strong><span>Choose control packs to install</span></div>
+          <div class="setup-step" data-setup-step="3" role="listitem"><b>3</b><strong>Build</strong><span>Review, build, and finish setup</span></div>
         </div>
 
-        <details class="setup-section collapse-card" data-collapsible open>
-          <summary><span>⚙</span><div><strong>Available Robots</strong><small>Select the robot(s) you want to build. You can choose multiple robots.</small></div></summary>
-          <div class="collapse-body">
-            <div id="robot-build-grid" class="robot-build-grid first-run-robot-grid"></div>
-            <details class="more-robots" data-collapsible>
-              <summary>More Robots</summary>
-              <div id="more-robot-build-grid" class="robot-build-grid secondary-robot-grid"></div>
-            </details>
+        <div class="setup-wizard-page" data-setup-step-panel="1">
+          <details class="setup-section collapse-card" data-collapsible open>
+            <summary><span>⚙</span><div><strong>Available Robots</strong><small>Select the robot(s) you want to build. You can choose multiple robots.</small></div></summary>
+            <div class="collapse-body">
+              <div id="robot-build-grid" class="robot-build-grid first-run-robot-grid"></div>
+              <details class="more-robots" data-collapsible>
+                <summary>More Robots</summary>
+                <div id="more-robot-build-grid" class="robot-build-grid secondary-robot-grid"></div>
+              </details>
+            </div>
+          </details>
+          <div class="first-run-actions wizard-actions">
+            <button id="skip-first-run" class="secondary">Skip for Now</button>
+            <span>Select at least one robot, then continue to package selection.</span>
+            <button id="setup-next-1" class="primary wizard-next" disabled>Next: Packages →</button>
           </div>
-        </details>
-
-        <details class="setup-section collapse-card" data-collapsible open>
-          <summary><span>⚙</span><div><strong>Installation Options</strong><small>Choose which packs to build for the selected robots.</small></div></summary>
-          <div class="collapse-body installation-options">
-            <label class="install-option-card"><input id="global-pack-high" type="checkbox" checked><span><strong>Install High-Level Control Pack</strong><small>Simulation controller, FSM, locomotion and supported policies.</small></span></label>
-            <label class="install-option-card"><input id="global-pack-low" type="checkbox" checked><span><strong>Install Low-Level SDK Pack</strong><small>LowCmd/LowState development and simulator-compatible SDK examples.</small></span></label>
-          </div>
-        </details>
-
-        <div class="first-run-actions">
-          <button id="build-selected" class="primary build-selected-large">🔨 Build Selected</button>
-          <button id="view-build-details" class="secondary">▤ View Details</button>
-          <button id="skip-first-run" class="secondary">› Skip for Now</button>
-          <span>You can always build more robots later from the Robots page.</span>
         </div>
 
-        <details id="first-build-progress" class="collapse-card build-details-card" data-collapsible>
-          <summary>Build Progress & Logs</summary>
-          <div class="collapse-body"><div class="build-actions"><button id="cancel-build" class="secondary" disabled>Cancel Build</button></div><div id="build-progress" class="build-progress"><span>No build running.</span></div><pre id="build-log" class="terminal small-terminal"></pre></div>
-        </details>
-        <div id="package-summary" class="sr-only">Select one or more robots.</div>
+        <div class="setup-wizard-page" data-setup-step-panel="2" hidden>
+          <details class="setup-section collapse-card" data-collapsible open>
+            <summary><span>⚙</span><div><strong>Installation Options</strong><small>Choose which packs to build for the selected robots.</small></div></summary>
+            <div class="collapse-body installation-options">
+              <label class="install-option-card"><input id="global-pack-high" type="checkbox" checked><span><strong>Install High-Level Control Pack</strong><small>Simulation controller, FSM, locomotion and supported policies.</small></span></label>
+              <label class="install-option-card"><input id="global-pack-low" type="checkbox" checked><span><strong>Install Low-Level SDK Pack</strong><small>LowCmd/LowState development and simulator-compatible SDK examples.</small></span></label>
+            </div>
+          </details>
+          <div class="first-run-actions wizard-actions">
+            <button id="setup-back-2" class="secondary">← Back</button>
+            <span>Package availability is applied per selected robot.</span>
+            <button id="setup-next-2" class="primary wizard-next">Next: Review Build →</button>
+          </div>
+        </div>
+
+        <div class="setup-wizard-page" data-setup-step-panel="3" hidden>
+          <div class="setup-review-card">
+            <div><span class="eyebrow">Ready to build</span><h3>Review your setup</h3></div>
+            <div id="setup-review-summary">Select one or more robots.</div>
+          </div>
+
+          <details id="first-build-progress" class="collapse-card build-details-card" data-collapsible open>
+            <summary>Build Progress & Logs</summary>
+            <div class="collapse-body">
+              <div class="build-actions"><button id="cancel-build" class="secondary" disabled>Cancel Build</button></div>
+              <div id="build-progress" class="build-progress"><span>No build running.</span></div>
+              <pre id="build-log" class="terminal small-terminal"></pre>
+            </div>
+          </details>
+
+          <div class="first-run-actions wizard-actions">
+            <button id="setup-back-3" class="secondary">← Back</button>
+            <span>After a successful build Robot Web Lab refreshes once so the new robot state is loaded cleanly.</span>
+            <button id="build-selected" class="primary build-selected-large">🔨 Build & Finish</button>
+          </div>
+          <div id="package-summary" class="sr-only">Select one or more robots.</div>
+        </div>
       </div>
 
       <aside class="first-run-overview">
@@ -200,7 +224,7 @@
 
     <!-- HIGH LEVEL RIGHT ACCORDION -->
     <section id="high-level-view" class="page-view high-level-view" hidden>
-      <div class="control-panel-heading"><div><span class="eyebrow">High Level</span><h1>High-Level Controls</h1><p>One control group opens at a time.</p></div><button class="tiny" data-collapse-all="#high-level-view">Collapse</button></div>
+      <div class="control-panel-heading"><div><span class="eyebrow">High Level</span><h1>High-Level Controls</h1><p>One control group opens at a time.</p></div><button id="high-level-panel-toggle" class="tiny" title="Collapse the full High-Level panel">Collapse Panel</button></div>
       <details class="collapse-card" data-collapsible data-exclusive-group="hl" open><summary>1. FSM / Modes</summary><div class="collapse-body"><div class="mode-grid"><button data-fsm="Passive">◉<span>Passive</span><kbd data-key-for="passive">1</kbd></button><button data-fsm="FixStand">♙<span>FixStand</span><kbd data-key-for="fix_stand">2</kbd></button><button data-fsm="Velocity">◌<span>Velocity</span><kbd data-key-for="velocity">3</kbd></button></div><p class="hint">Use the High Level / Low Level toggle in the top bar to change control ownership.</p></div></details>
       <details class="collapse-card" data-collapsible data-exclusive-group="hl"><summary>2. Velocity Control</summary><div class="collapse-body"><label class="slider-row">Forward / Back (W/S)<input id="velocity-vx" type="range" min="-.5" max="1" step=".02" value="0"><output id="velocity-vx-value">0.00</output></label><label class="slider-row">Left / Right (A/D)<input id="velocity-vy" type="range" min="-.5" max=".5" step=".02" value="0"><output id="velocity-vy-value">0.00</output></label><label class="slider-row">Yaw (Q/E)<input id="velocity-yaw" type="range" min="-1" max="1" step=".05" value="0"><output id="velocity-yaw-value">0.00</output></label></div></details>
       <details id="mimic-panel" class="collapse-card" data-collapsible data-exclusive-group="hl"><summary>3. Policies / Dance</summary><div class="collapse-body">
@@ -230,10 +254,6 @@
             </div>
             <textarea id="code-editor" spellcheck="false" placeholder="Open an SDK example or create a workspace file…"></textarea>
           </div>
-        </details>
-        <details id="ll-workflow-panel" class="collapse-card ll-workflow-panel" data-collapsible>
-          <summary>LL Workflow <span id="ll-owner-badge" class="summary-badge">Owner: —</span></summary>
-          <div class="collapse-body"><div class="workflow-grid"><div><b>1</b><strong>Open Example</strong><small>Browse a simulator-compatible low-level example.</small></div><div><b>2</b><strong>Copy</strong><small>Keep SDK source read-only.</small></div><div><b>3</b><strong>Edit / Build</strong><small>Work in your project copy.</small></div><div><b>4</b><strong>Run</strong><small>The top Low Level toggle owns LL Debug automatically.</small></div></div><div class="mode-owner-note">Control ownership follows the top <b>High Level / Low Level</b> switch.</div></div>
         </details>
       </section>
     </section>

@@ -15,13 +15,16 @@ def test_low_level_workspace_is_code_first_and_terminal_is_resizable():
     assert "bindHorizontal('#ll-terminal-splitter')" in js
 
 
-def test_low_level_workflow_is_collapsed_by_default_and_viewport_survives_max_code():
+def test_low_level_side_panels_collapse_into_edges_and_workflow_card_is_removed():
     html=(ROOT/'frontend/index.html').read_text()
     css=(ROOT/'frontend/styles.css').read_text()
-    workflow=html.split('id="ll-workflow-panel"',1)[1].split('>',1)[0]
-    assert ' open' not in workflow
-    max_block=css.split('.workspace.mode-low.editor-maximized',1)[1]
-    assert '#simulation-viewport' not in max_block.split('@media',1)[0] or 'display:none' not in max_block.split('@media',1)[0]
+    assert 'id="ll-workflow-panel"' not in html
+    assert 'll-examples-collapsed' in css
+    assert 'll-editor-collapsed' in css
+    assert 'console-collapsed' in css
+    assert '--ll-examples-track:44px' in css
+    assert '--ll-editor-track:44px' in css
+    assert '--ll-terminal-track:44px' in css
 
 
 def test_editor_focus_keeps_global_ll_shortcuts_and_exposes_focus_hint():

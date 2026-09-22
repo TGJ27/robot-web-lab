@@ -2,7 +2,7 @@ import { UnitreeModelView } from './robot_view.js';
 import { BuildSelectionStore } from './build_selection.js';
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const api=async(path,options={})=>{const r=await fetch(path,{headers:{'Content-Type':'application/json',...(options.headers||{})},...options});if(!r.ok){let t=await r.text();try{const j=JSON.parse(t);t=typeof j.detail==='string'?j.detail:JSON.stringify(j.detail)}catch{}throw new Error(t)}return r.status===204?null:r.json()};
-let robots=[],settings=null,buildStatus=null,state=null,simulationStatus={running:false},activePage='simulate',activeExample=null,pendingKey=null,keyConflict=null,buildTimer=null,activeRunnerStatus=null,llUiBusy=null,confirmResolver=null,activeRobotManagerId=null,scriptsSection='builtin';
+let robots=[],settings=null,buildStatus=null,state=null,simulationStatus={running:false},activePage='simulate',activeExample=null,pendingKey=null,keyConflict=null,buildTimer=null,activeRunnerStatus=null,llUiBusy=null,confirmResolver=null,activeRobotManagerId=null,scriptsSection='builtin',firstRunStep=1;
 const buildSelections = new BuildSelectionStore();
 let view=null; try{view=new UnitreeModelView($('#robot-viewport'));}catch(e){$('#viewport-error').hidden=false;$('#viewport-error').textContent=`3D renderer unavailable: ${e.message}`;}
 const velocityKeys=new Set(); let velocityKeyboardTimer=null; let followCameraEnabled=false; let wsConnected=false;
@@ -33,7 +33,7 @@ function setWorkspaceMode(mode){const host=$('#workspace');if(!host)return;host.
 
 async function boot(){
   [robots,settings,buildStatus,state,simulationStatus]=await Promise.all([api('/api/robots'),api('/api/settings'),api('/api/build/status'),api('/api/state'),api('/api/simulation/status')]);
-  applyTheme(settings.theme); preloadRobotPhotos(); renderRobotSelect(); renderBuildCards(); renderBuildProgress(); renderInstalled(); renderSettingsKeymap(); renderKeymap(); renderState(state); renderSimulationStatus(); restorePanels(); initExclusiveAccordion();
+  applyTheme(settings.theme); preloadRobotPhotos(); renderRobotSelect(); renderBuildCards(); renderBuildProgress(); renderInstalled(); renderSettingsKeymap(); renderKeymap(); renderState(state); renderSimulationStatus(); restorePanels(); initExclusiveAccordion(); initWorkspacePanelCollapse();
   if(!installed().length) showFirstRun(); else { showPage('simulate'); await loadActiveRobot(); }
   connectWs(); pollBuilds(); setInterval(pollNativeState,50); setInterval(pollSimulationStatus,1000); setInterval(refreshRunnerStatus,750);
 }
@@ -77,7 +77,7 @@ async function chooseRobot(id){
 async function loadActiveRobot(){const r=currentRobot();const ph=$('#viewport-placeholder'),vs=$('#viewport-state');if(!r){ph.hidden=false;vs.hidden=true;view?.clear();return}ph.hidden=true;vs.hidden=false;$('#viewport-robot-name').textContent=r.display_name;$('#viewport-state-label').textContent=r.display_name;try{await view?.loadRobot(r.id);$('#viewport-error').hidden=true}catch(e){$('#viewport-error').hidden=false;$('#viewport-error').textContent=`Robot mesh load failed: ${e.message}`;log(`Model load failed: ${e.message}`,'WARN')}renderCapabilityViews()}
 function applyLevelView(level,persist=true){const r=currentRobot(),info=buildStatus?.robots?.[r?.id];const highOk=!!(r&&info?.high_level&&r.supports_web_high_level),lowOk=!!(r&&info?.low_level);if(level==='high'&&!highOk)level=lowOk?'low':'high';settings.ui_level=level;$('#level-high').classList.toggle('active',level==='high');$('#level-low').classList.toggle('active',level==='low');if(activePage==='simulate'||activePage==='examples'){$('#high-level-view').hidden=level!=='high';$('#low-level-view').hidden=level!=='low';setWorkspaceMode(level==='low'?'low':'high')}if(persist)saveSettings().catch(e=>log(e.message,'ERROR'));if(level==='low')refreshExamples();renderSettingsSummary();return level}
 function renderCapabilityViews(){const r=currentRobot(),info=buildStatus?.robots?.[r?.id];const highOk=!!(r&&info?.high_level&&r.supports_web_high_level);$('#level-high').disabled=!highOk;$('#level-low').disabled=!(r&&info?.low_level);if(settings.ui_level==='high'&&!highOk)settings.ui_level='low';applyLevelView(settings.ui_level,false)}
-function showFirstRun(){activePage='first';setWorkspaceMode('first');$$('.page-view').forEach(x=>x.hidden=true);$('#first-run-view').hidden=false;$('#start-simulation').disabled=true;$('#sim-status').textContent='● No Robots Installed';$('#sim-status').className='status-pill offline';$('#viewport-placeholder').hidden=false;$('#viewport-state').hidden=true;renderPackageSummary()}
+function showFirstRun(){activePage='first';setWorkspaceMode('first');$$('.page-view').forEach(x=>x.hidden=true);$('#first-run-view').hidden=false;$('#start-simulation').disabled=true;$('#sim-status').textContent='● No Robots Installed';$('#sim-status').className='status-pill offline';$('#viewport-placeholder').hidden=false;$('#viewport-state').hidden=true;setSetupStep(1);renderPackageSummary()}
 function showPage(page){activePage=page;$$('.rail-item').forEach(b=>b.classList.toggle('active',b.dataset.page===page));$$('.page-view').forEach(x=>x.hidden=true);if(page==='simulate'){if(!installed().length)return showFirstRun();const level=settings.ui_level;setWorkspaceMode(level==='low'?'low':'high');$(level==='low'?'#low-level-view':'#high-level-view').hidden=false}else if(page==='robots'){setWorkspaceMode('robots');$('#robots-view').hidden=false;renderRobotManager()}else if(page==='scripts'){setWorkspaceMode('scripts');$('#scripts-view').hidden=false;refreshScriptsFiles()}else if(page==='assets'){setWorkspaceMode('assets');$('#assets-view').hidden=false}else if(page==='settings'){setWorkspaceMode('settings');$('#settings-view').hidden=false;renderSettingsSummary()} }
 async function switchLevel(level,persist=true){const r=currentRobot(),info=buildStatus?.robots?.[r?.id];if(!r)return;if(level==='high'&&!(info?.high_level&&r.supports_web_high_level)){log('High-Level pack is not available for this robot.','WARN');return}if(level==='low'&&!info?.low_level){log('Low-Level SDK pack is not available for this robot.','WARN');return}const previous=settings.ui_level;$('#level-high').disabled=true;$('#level-low').disabled=true;stopVelocityKeyboardLoop(true);try{if(level==='low'){setLlBusy('switching');state=await api('/api/control/ll-prepare',{method:'POST'});renderState(state)}else{state=await api('/api/control/passive',{method:'POST'});llUiBusy=null;renderState(state);await refreshRunnerStatus()}applyLevelView(level,persist);log(level==='low'?'Low-Level Debug owns control.':'High-Level Passive owns control.')}catch(e){log(e.message,'WARN');applyLevelView(previous,false)}finally{if(llUiBusy==='switching')setLlBusy(null);renderCapabilityViews()}}
 
@@ -221,6 +221,63 @@ function syncGlobalPack(pack,enabled){
   for(const r of robots){const d=buildSelections.get(r.id);if(!d?.selected)continue;const cap=capability(r);buildSelections.setPack(r.id,pack,Boolean(enabled&&(pack==='highLevel'?cap.hl:cap.ll)))}
   renderPackageSummary();
 }
+
+function setSetupStep(step){
+  firstRunStep=Math.max(1,Math.min(3,Number(step)||1));
+  $$('[data-setup-step]').forEach(el=>{
+    const n=Number(el.dataset.setupStep);
+    el.classList.toggle('active',n===firstRunStep);
+    el.classList.toggle('completed',n<firstRunStep);
+  });
+  $$('[data-setup-step-panel]').forEach(el=>{el.hidden=Number(el.dataset.setupStepPanel)!==firstRunStep});
+  const chip=$('.setup-chip b');if(chip)chip.textContent=String(firstRunStep).padStart(2,'0');
+  updateSetupWizardButtons();
+}
+function updateSetupWizardButtons(){
+  const items=selectedBuildItems(),hasSelection=items.length>0;
+  const validPacks=hasSelection&&items.every(x=>x.high_level||x.low_level);
+  const next1=$('#setup-next-1'),next2=$('#setup-next-2'),back3=$('#setup-back-3'),build=$('#build-selected');
+  if(next1)next1.disabled=!hasSelection;
+  if(next2)next2.disabled=!validPacks;
+  if(back3)back3.disabled=!!buildStatus?.building;
+  if(build)build.disabled=!validPacks||!!buildStatus?.building;
+  const review=$('#setup-review-summary');
+  if(review){
+    if(!hasSelection)review.textContent='Select one or more robots.';
+    else review.textContent=items.map(item=>{
+      const robot=robotBy(item.robot_id);
+      const packs=[item.high_level?'High-Level':null,item.low_level?'Low-Level':null].filter(Boolean).join(' + ')||'No package';
+      return `${robot?.display_name||item.robot_id}: ${packs}`;
+    }).join(' · ');
+  }
+}
+function syncWorkspacePanelCollapse(){
+  const ws=$('#workspace');if(!ws)return;
+  const examples=$('#ll-examples-panel'),editor=$('#ll-editor-panel'),consolePanel=$('#console-panel');
+  ws.classList.toggle('ll-examples-collapsed',!!examples&&!examples.open);
+  ws.classList.toggle('ll-editor-collapsed',!!editor&&!editor.open);
+  ws.classList.toggle('console-collapsed',!!consolePanel&&!consolePanel.open);
+  requestAnimationFrame(()=>view?.resize());
+}
+function setHighPanelCollapsed(collapsed,persist=true){
+  const ws=$('#workspace'),button=$('#high-level-panel-toggle');if(!ws||!button)return;
+  ws.classList.toggle('high-panel-collapsed',!!collapsed);
+  button.textContent=collapsed?'‹':'Collapse Panel';
+  button.title=collapsed?'Expand High-Level controls':'Collapse the full High-Level panel';
+  if(persist)localStorage.setItem('rwl-v010-high-panel-collapsed',collapsed?'1':'0');
+  requestAnimationFrame(()=>view?.resize());
+}
+function initWorkspacePanelCollapse(){
+  for(const selector of ['#ll-examples-panel','#ll-editor-panel','#console-panel']){
+    const panel=$(selector);if(panel)panel.addEventListener('toggle',syncWorkspacePanelCollapse);
+  }
+  const savedHigh=localStorage.getItem('rwl-v010-high-panel-collapsed')==='1';
+  setHighPanelCollapsed(savedHigh,false);
+  const highToggle=$('#high-level-panel-toggle');
+  if(highToggle)highToggle.addEventListener('click',()=>setHighPanelCollapsed(!$('#workspace').classList.contains('high-panel-collapsed')));
+  syncWorkspacePanelCollapse();
+}
+
 function renderPackageSummary(){
   const items=buildSelections.selectedItems(),count=items.length;
   const p=$('#package-summary');if(p)p.textContent=count?`${count} robot${count===1?'':'s'} selected.`:'Select one or more robots.';
@@ -231,6 +288,7 @@ function renderPackageSummary(){
   const managerBuild=$('#manager-build-selected');if(managerBuild){managerBuild.textContent=`🔨 Build Selected (${count})`;managerBuild.disabled=!count||!!buildStatus?.building}
   const managerRebuild=$('#manager-rebuild-selected');if(managerRebuild)managerRebuild.disabled=!count||!!buildStatus?.building;
   const empty=$('.overview-empty');if(empty){const strong=$('strong',empty),small=$('small',empty);if(count){strong.textContent=`${count} robot${count===1?'':'s'} selected`;small.textContent='Ready to build the selected packages.'}else{strong.textContent='No robots selected';small.textContent='Select one or more robots to see build details here.'}}
+  updateSetupWizardButtons();
 }
 async function startBuild(){
   const items=selectedBuildItems();
@@ -243,18 +301,35 @@ async function startBuild(){
     : 'Continue with the selected build.';
   if(!(await stopSimulationAndContinue(reason,itemIds)))return;
   try{
+    if(activePage==='first'){setSetupStep(3);const progress=$('#first-build-progress');if(progress)progress.open=true}
     buildStatus=await api('/api/build/start',{method:'POST',body:JSON.stringify({robots:items})});
     renderBuildProgress();
     log(`Started selective build: ${items.map(x=>x.robot_id).join(', ')}`);
   }catch(e){alert(e.message)}
 }
 async function cancelBuild(){await api('/api/build/cancel',{method:'POST'});await refreshBuildStatus()}
-async function refreshBuildStatus(){const old=buildStatus?.building;buildStatus=await api('/api/build/status');updateRobotCardBuildState();renderBuildProgress();renderInstalled();if(old&&!buildStatus.building){settings=await api('/api/settings/sync-builds',{method:'POST'});renderRobotSelect();if(installed().length){if(!settings.active_robot){settings.active_robot=installed()[0];await saveSettings()}await chooseRobot(settings.active_robot);showPage('simulate')} } }
+async function refreshBuildStatus(){
+  const wasBuilding=!!buildStatus?.building;
+  const finishingIds=[...(buildStatus?.current||[])];
+  buildStatus=await api('/api/build/status');
+  updateRobotCardBuildState();renderBuildProgress();renderInstalled();updateSetupWizardButtons();
+  if(wasBuilding&&!buildStatus.building){
+    settings=await api('/api/settings/sync-builds',{method:'POST'});
+    renderRobotSelect();
+    const succeeded=finishingIds.length>0&&finishingIds.every(rid=>buildStatus?.robots?.[rid]?.status==='installed');
+    if(succeeded){
+      log(`Build completed: ${finishingIds.map(id=>robotBy(id)?.display_name||id).join(', ')}. Refreshing interface.`);
+      location.reload();
+      return;
+    }
+    if(activePage==='first')setSetupStep(3);
+  }
+}
 function pollBuilds(){clearInterval(buildTimer);buildTimer=setInterval(()=>refreshBuildStatus().catch(()=>{}),1000)}
 function renderBuildProgress(){for(const id of ['#build-progress','#manager-build-progress']){const host=$(id);if(!host)continue;host.innerHTML='';for(const rid of buildStatus?.current||[]){const r=robotBy(rid),x=buildStatus.robots[rid];host.insertAdjacentHTML('beforeend',`<div class="progress-row"><span>${r?.display_name||rid}</span><div class="progress-bar"><span style="width:${x.progress||0}%"></span></div><b>${x.progress||0}%</b></div><small class="muted">${x.stage||''}</small>`)}if(!(buildStatus?.current||[]).length)host.innerHTML='<span class="muted">No build running.</span>'}const lines=(buildStatus?.log||[]).slice(-120).join('\n');const buildLog=$('#build-log'),managerLog=$('#manager-build-log'),cancel=$('#cancel-build'),queue=$('#robot-build-queue-count');if(buildLog)buildLog.textContent=lines;if(managerLog)managerLog.textContent=lines;if(cancel)cancel.disabled=!buildStatus?.building;if(queue)queue.textContent=String((buildStatus?.current||[]).length);renderPackageSummary()}
 function renderInstalled(){const host=$('#installed-robots-list'),ids=installed(),count=$('#robots-installed-count');if(count)count.textContent=String(ids.length);host.innerHTML='';if(!ids.length){host.innerHTML='<span class="muted">No robots installed.</span>';return}for(const id of ids){const r=robotBy(id),info=buildStatus.robots[id];host.insertAdjacentHTML('beforeend',`<div class="list-row"><span><b>${r.display_name}</b><small class="muted"> · ${info.high_level?'HL ':''}${info.low_level?'LL':''}</small></span><span class="badge ok">Ready</span></div>`)}}
 
-function renderState(s){state=s;$('#viewport-mode').textContent=s?.fsm_mode||'—';$('#viewport-time').textContent=formatTime(s?.sim_time||0);$('#ll-owner-badge').textContent=`Owner: ${s?.control_owner||'—'}`;const live=$('#viewport-live-source');if(live)live.textContent=s?.connected?'● Live MuJoCo':'○ Model Ready · Live MuJoCo when simulation runs';view?.updateState(s);refreshDiagnosticBuffers();$$('[data-fsm]').forEach(b=>b.classList.toggle('active',b.dataset.fsm===s?.fsm_mode));renderTelemetry()}
+function renderState(s){state=s;$('#viewport-mode').textContent=s?.fsm_mode||'—';$('#viewport-time').textContent=formatTime(s?.sim_time||0);const llOwner=$('#ll-owner-badge');if(llOwner)llOwner.textContent=`Owner: ${s?.control_owner||'—'}`;const live=$('#viewport-live-source');if(live)live.textContent=s?.connected?'● Live MuJoCo':'○ Model Ready · Live MuJoCo when simulation runs';view?.updateState(s);refreshDiagnosticBuffers();$$('[data-fsm]').forEach(b=>b.classList.toggle('active',b.dataset.fsm===s?.fsm_mode));renderTelemetry()}
 function formatTime(sec){const s=Math.floor(sec%60).toString().padStart(2,'0'),m=Math.floor(sec/60%60).toString().padStart(2,'0'),h=Math.floor(sec/3600).toString().padStart(2,'0');return `${h}:${m}:${s}`}
 function renderTelemetry(){const host=$('#telemetry-grid');if(!host)return;const rpy=state?.rpy||[0,0,0];host.innerHTML=`<div class="telemetry-card">FSM <b>${state?.fsm_mode||'—'}</b></div><div class="telemetry-card">Owner <b>${state?.control_owner||'—'}</b></div><div class="telemetry-card">Roll <b>${rpy[0].toFixed(2)}</b></div><div class="telemetry-card">Pitch <b>${rpy[1].toFixed(2)}</b></div><div class="telemetry-card">Yaw <b>${rpy[2].toFixed(2)}</b></div><div class="telemetry-card">Policy <b>${state?.policy_hz||0} Hz</b></div>`}
 async function setFsm(mode){if(mode!=='Velocity')stopVelocityKeyboardLoop(false);try{state=await api('/api/control/fsm',{method:'POST',body:JSON.stringify({mode})});renderState(state)}catch(e){log(e.message,'WARN')}}

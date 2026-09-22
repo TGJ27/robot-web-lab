@@ -86,3 +86,16 @@ def test_frontend_prompts_before_switching_or_rebuilding_running_robot():
     assert "Stop & Continue" in js
     assert "Switch to ${target?.display_name||id}." in js
     assert "itemIds.includes(runningId)" in js
+
+
+def test_first_run_is_three_step_wizard_and_high_level_panel_collapses_as_a_whole():
+    html = text("frontend/index.html")
+    js = text("frontend/app.js")
+    for token in ('data-setup-step-panel="1"', 'data-setup-step-panel="2"', 'data-setup-step-panel="3"',
+                  'id="setup-next-1"', 'id="setup-back-2"', 'id="setup-next-2"',
+                  'id="setup-back-3"', 'id="high-level-panel-toggle"'):
+        assert token in html
+    assert "setSetupStep" in js
+    assert "setHighPanelCollapsed" in js
+    assert "location.reload()" in js
+    assert 'id="ll-workflow-panel"' not in html

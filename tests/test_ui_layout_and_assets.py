@@ -79,3 +79,9 @@ def test_browser_model_view_supports_obj_assets_for_go2():
     js=(ROOT / 'frontend' / 'robot_view.js').read_text(encoding='utf-8')
     assert 'parseObjGeometry' in js
     assert "endsWith('.obj')" in js
+
+
+def test_follow_camera_targets_robot_body_center():
+    js=(ROOT / 'frontend' / 'robot_view.js').read_text(encoding='utf-8')
+    assert 'worldTarget.y+=.82' not in js
+    assert "floating base is the robot's body center" in js
