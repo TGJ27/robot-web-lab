@@ -238,6 +238,10 @@ function updateSetupWizardButtons(){
   const validPacks=hasSelection&&items.every(x=>x.high_level||x.low_level);
   const next1=$('#setup-next-1'),next2=$('#setup-next-2'),back3=$('#setup-back-3'),build=$('#build-selected');
   if(next1)next1.disabled=!hasSelection;
+  const step1Hint=$('#setup-step-1-hint');
+  if(step1Hint)step1Hint.textContent=hasSelection
+    ? `${items.length} robot${items.length===1?'':'s'} selected. Continue to package selection.`
+    : 'Select at least one robot, then continue to package selection.';
   if(next2)next2.disabled=!validPacks;
   if(back3)back3.disabled=!!buildStatus?.building;
   if(build)build.disabled=!validPacks||!!buildStatus?.building;
@@ -442,6 +446,22 @@ function initExclusiveAccordion(){const items=$$('details[data-exclusive-group="
 $('#save-layout-top').onclick=()=>{localStorage.setItem('rwl-v010-layout-saved-at',new Date().toISOString());log('Layout saved in this browser.');};
 $('#robot-select').addEventListener('change',e=>chooseRobot(e.target.value));$('#level-high').onclick=()=>switchLevel('high');$('#level-low').onclick=()=>switchLevel('low');
 $$('.rail-item').forEach(b=>b.onclick=()=>showPage(b.dataset.page));$('#setup-button').onclick=()=>showPage('robots');$('#theme-toggle').onclick=()=>setTheme(document.documentElement.dataset.theme==='dark'?'light':'dark');$$('[data-set-theme]').forEach(b=>b.onclick=()=>setTheme(b.dataset.setTheme));
+// RWL first-run wizard navigation handlers
+$('#setup-next-1')?.addEventListener('click',()=>{
+  if(!selectedBuildItems().length)return;
+  setSetupStep(2);
+});
+$('#setup-back-2')?.addEventListener('click',()=>setSetupStep(1));
+$('#setup-next-2')?.addEventListener('click',()=>{
+  const items=selectedBuildItems();
+  if(!items.length)return alert('Select at least one robot.');
+  if(!items.every(x=>x.high_level||x.low_level))
+    return alert('Choose at least one package for every selected robot.');
+  setSetupStep(3);
+});
+$('#setup-back-3')?.addEventListener('click',()=>{
+  if(!buildStatus?.building)setSetupStep(2);
+});
 $('#global-pack-high')?.addEventListener('change',e=>syncGlobalPack('highLevel',e.target.checked));$('#global-pack-low')?.addEventListener('change',e=>syncGlobalPack('lowLevel',e.target.checked));$('#view-build-details')?.addEventListener('click',()=>{$('#first-build-progress').open=true;$('#first-build-progress').scrollIntoView({behavior:'smooth',block:'nearest'})});$('#skip-first-run')?.addEventListener('click',()=>showPage('robots'));
 $('#build-selected').onclick=startBuild;const managerBuild=$('#manager-build-selected');if(managerBuild)managerBuild.onclick=startBuild;const managerRebuild=$('#manager-rebuild-selected');if(managerRebuild)managerRebuild.onclick=startBuild;$('#cancel-build').onclick=cancelBuild;$('#robots-refresh').onclick=refreshBuildStatus;$('#robot-installation-guide')?.addEventListener('click',()=>alert(`Robot build flow:
 
