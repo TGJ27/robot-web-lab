@@ -191,6 +191,11 @@ fsm.write_text(s, encoding="utf-8")
 # Publish the real native FSM state for the web UI for every robot.
 # ---------------------------------------------------------------------------
 s = ctrl.read_text(encoding="utf-8")
+# Repair the exact clean-clone corruption produced by older G1 patch scripts:
+# a standalone C++ source line containing the literal characters "\\n".
+_had_trailing_newline = s.endswith("\n")
+_lines = [line for line in s.splitlines() if line.strip() != r"\n"]
+s = "\n".join(_lines) + ("\n" if _had_trailing_newline else "")
 for inc in ("#include <cstdlib>", "#include <fstream>"):
     if inc not in s:
         # Insert after any existing #pragma/include preamble.

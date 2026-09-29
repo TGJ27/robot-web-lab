@@ -515,7 +515,8 @@ if '#include <fstream>' not in text:
 
 generic_call = 'rwl_write_fsm_state(currentState->getStateString());'
 if generic_call not in text:
-    helper = r'''\n// === G1 FSM RUNTIME STATE BEGIN ===
+    helper = r'''
+// === G1 FSM RUNTIME STATE BEGIN ===
 inline void write_g1_sim_fsm_state(const std::string& state)
 {
     const char* dir = std::getenv("G1_SIM_RUNTIME_DIR");
@@ -630,6 +631,7 @@ assert (
     'write_g1_sim_fsm_state(currentState->getStateString())' in ctrl_text
     or 'rwl_write_fsm_state(currentState->getStateString())' in ctrl_text
 )
+assert not any(line.strip() == r'\n' for line in ctrl_text.splitlines())
 assert 'static Eigen::Quaternionf init_quat = Eigen::Quaternionf::Identity();' in mimic_text
 assert 'const Eigen::Matrix3f rot' in mimic_text
 assert align_marker in mimic_text

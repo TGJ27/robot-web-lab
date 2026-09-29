@@ -90,6 +90,7 @@ python3 "$ROOT/scripts/apply_g1_patch.py" "$RL"
 python3 "$ROOT/scripts/apply_g1_23dof_mimic_patch.py" "$RL"
 python3 "$ROOT/scripts/apply_web_hl_patch.py" "$RL"
 python3 "$ROOT/scripts/apply_web_state_patch.py" "$RL"
+python3 "$ROOT/scripts/validate_runtime_overlays.py" "$ROOT" "$RL"
 
 head="$(git -C "$RL" rev-parse HEAD)"
 src="$(source_key)"

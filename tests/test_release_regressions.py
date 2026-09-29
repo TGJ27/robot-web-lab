@@ -80,3 +80,39 @@ def test_g1_23dof_mimic_web_pack_is_enabled():
     assert 'apply_g1_23dof_mimic_patch.py' in native
     assert 'action == "Mimic"' in bridge
     assert 'joystick.RB(true)' in bridge and 'joystick.A(true)' in bridge
+
+
+def test_clean_clone_g1_patch_never_emits_literal_backslash_n():
+    patch = text('scripts/apply_g1_patch.py')
+    triple = "'" * 3
+    bad = "helper = r" + triple + "\\n// === G1 FSM RUNTIME STATE BEGIN ==="
+    good = "helper = r" + triple + "\n// === G1 FSM RUNTIME STATE BEGIN ==="
+    assert bad not in patch
+    assert good in patch
+    assert "assert not any(line.strip()" in patch
+    assert "ctrl_text.splitlines()" in patch
+
+
+def test_runtime_overlay_validator_runs_before_checkpoint_and_native_build():
+    overlay = text('scripts/apply_runtime_overlays.sh')
+    native = text('scripts/native_build.py')
+    assert 'scripts/validate_runtime_overlays.py' in overlay
+    assert 'scripts/validate_runtime_overlays.py' in native
+
+
+def test_all_pinned_high_level_controller_targets_are_covered():
+    native = text('scripts/native_build.py')
+    compat = text('scripts/apply_rl_mjlab_compat_patch.py')
+    for directory, target in {
+        "g1": "g1_ctrl",
+        "g1_23dof": "g1_ctrl",
+        "go2": "go2_ctrl",
+        "h1_2": "h1_2_ctrl",
+        "a2": "a2_ctrl",
+        "r1": "r1_ctrl",
+    }.items():
+        assert directory in native
+        assert target in native
+        assert directory in compat
+    controller_block = native.split("controller_targets={",1)[1].split("}",1)[0]
+    assert '"unitree_h2"' not in controller_block

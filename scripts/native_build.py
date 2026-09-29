@@ -162,6 +162,7 @@ def main()->int:
 
     # Robot-agnostic qpos bridge for the browser viewport.
     run([sys.executable,str(root/"scripts/apply_web_state_patch.py"),str(rl)])
+    run([sys.executable,str(root/"scripts/validate_runtime_overlays.py"),str(root),str(rl)])
 
     # One shared simulator binary supports the selected robot models. Never build the optional jstest target.
     sim_build=rl/"simulate/build"; sim_bin=sim_build/"rwl_mujoco_headless"
