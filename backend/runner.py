@@ -23,9 +23,12 @@ class ProcessBusyError(RuntimeError):
 
 
 class LowLevelRunner:
-    def __init__(self, workspace_root: Path, sdk_root: Path, owner: Callable[[], str], sdk_prefix: Path | None = None, registry: RobotRegistry | None = None, profile_store: BuildProfileStore | None = None):
+    def __init__(self, workspace_root: Path, sdk_root: Path, owner: Callable[[], str], sdk_prefix: Path | None = None, registry: RobotRegistry | None = None, profile_store: BuildProfileStore | None = None, python_sdk_root: Path | None = None, python_executable: Path | None = None, python_cyclonedds_home: Path | None = None):
         self.workspace_root = Path(workspace_root).resolve()
         self.sdk_root = Path(sdk_root).resolve()
+        self.python_sdk_root = Path(python_sdk_root).resolve() if python_sdk_root else None
+        self.python_executable = Path(python_executable).resolve() if python_executable else None
+        self.python_cyclonedds_home = Path(python_cyclonedds_home).resolve() if python_cyclonedds_home else None
         self._owner = owner
         self.sdk_prefix = Path(sdk_prefix).resolve() if sdk_prefix else None
         self.registry = registry or RobotRegistry.default()
@@ -42,7 +45,8 @@ class LowLevelRunner:
         source = Path(source).resolve()
         allowed = (
             source == self.workspace_root or self.workspace_root in source.parents or
-            source == self.sdk_root or self.sdk_root in source.parents
+            source == self.sdk_root or self.sdk_root in source.parents or
+            (self.python_sdk_root is not None and (source == self.python_sdk_root or self.python_sdk_root in source.parents))
         )
         if not allowed:
             raise UnsafePathError("Only managed workspace or approved SDK files can be executed")
@@ -67,10 +71,36 @@ class LowLevelRunner:
             root = (self.sdk_root / robot.sdk_example_path).resolve()
             if root == source or root in source.parents:
                 return robot
+        if self.python_sdk_root is not None:
+            for robot in self.registry.list():
+                py_rel = robot.python_sdk_example_path
+                if not py_rel:
+                    continue
+                root = (self.python_sdk_root / py_rel).resolve()
+                if root == source or root in source.parents:
+                    return robot
         raise UnsafePathError("SDK source is not associated with a known robot")
 
     def _is_builtin(self, source: Path) -> bool:
-        return self.sdk_root in source.parents
+        return (
+            self.sdk_root in source.parents
+            or (self.python_sdk_root is not None and self.python_sdk_root in source.parents)
+        )
+
+    def _python_env(self) -> dict[str, str]:
+        env = os.environ.copy()
+        compat = Path(__file__).resolve().parent / "python_sim_compat"
+        env["RWL_MUJOCO_SIM"] = "1"
+        env["PYTHONPATH"] = str(compat) + (":" + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+        if self.python_cyclonedds_home is not None:
+            home = str(self.python_cyclonedds_home)
+            env["CYCLONEDDS_HOME"] = home
+            lib = str(self.python_cyclonedds_home / "lib")
+            env["LD_LIBRARY_PATH"] = lib + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+        return env
+
+    def _python_bin(self) -> str:
+        return str(self.python_executable or Path(sys.executable))
 
     def _relative_for_profile(self, source: Path, robot_id: str) -> str:
         robot = self.registry.get(robot_id)
@@ -101,7 +131,7 @@ class LowLevelRunner:
         self._require_low_owner()
         source = self._validate_source(source)
         if source.suffix.lower() == ".py":
-            return [sys.executable, str(source), interface]
+            return [self._python_bin(), "-u", str(source), interface]
         if source.suffix.lower() not in {".cpp", ".cc", ".cxx"}:
             raise ValueError("Unsupported source type")
         return [str(self.binary_for(source, robot_id)), interface]
@@ -160,7 +190,12 @@ class LowLevelRunner:
     def build(self, source: Path, robot_id: str | None = None, relative_path: str | None = None, builtin: bool | None = None) -> tuple[bool, str]:
         source = self._validate_source(source)
         if source.suffix.lower() == ".py":
-            result = subprocess.run([sys.executable, "-m", "py_compile", str(source)], text=True, capture_output=True)
+            result = subprocess.run(
+                [self._python_bin(), "-m", "py_compile", str(source)],
+                text=True,
+                capture_output=True,
+                env=self._python_env(),
+            )
             return result.returncode == 0, result.stdout + result.stderr
         binary = self.binary_for(source, robot_id)
         build_dir = binary.parent
@@ -190,8 +225,25 @@ class LowLevelRunner:
                 raise ProcessBusyError("A low-level program is already running")
             self._active_source = source
             self._active_robot_id = robot_id
-            self._process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, start_new_session=True, bufsize=1)
+            self._logs.clear()
+            self._logs.append("$ " + " ".join(command))
+            self._process = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                start_new_session=True,
+                bufsize=1,
+                env=self._python_env() if source.suffix.lower() == ".py" else None,
+            )
             process = self._process
+            if self._is_builtin(source) and process.stdin is not None:
+                try:
+                    process.stdin.write("\n")
+                    process.stdin.flush()
+                except OSError:
+                    pass
             (self.runtime_dir / 'll.pid').write_text(f'{process.pid}\n')
         threading.Thread(target=self._collect_output, args=(process,), daemon=True).start()
         return process.pid

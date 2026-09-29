@@ -65,3 +65,29 @@ def test_stop_button_is_greyed_out_until_a_low_level_process_runs():
 def test_low_level_run_is_disabled_without_native_simulation():
     js=(ROOT/'frontend/app.js').read_text().replace(' ','')
     assert "run.disabled=!runnable||!status.built||!simulationStatus?.running" in js
+
+
+def test_runner_program_output_is_streamed_into_logs():
+    js=(ROOT/'frontend/app.js').read_text()
+    assert "async function refreshRunnerOutput()" in js
+    assert "/api/runner/status" in js
+    assert "[PROGRAM]" in js
+    assert "[BUILD]" in js
+    assert "setInterval(refreshRunnerOutput,300)" in js
+
+
+def test_python_sources_do_not_show_build_or_rebuild():
+    js=(ROOT/'frontend/app.js').read_text()
+    assert "build.hidden=isPython" in js
+    assert "if(!isPython&&!activeRunnerStatus?.built)" in js
+    assert "interpreted; no build required" in (ROOT/'scripts/native_build.py').read_text()
+
+
+def test_robot_switch_clears_stale_low_level_editor():
+    js=(ROOT/'frontend/app.js').read_text(encoding='utf-8')
+    assert "function clearActiveExample(" in js
+    assert "activeExample={path:data.path,builtin,readonly:data.readonly,robot_id:r.id};" in js
+    assert "if(activeExample.robot_id&&activeExample.robot_id!==r.id){clearActiveExample();return}" in js
+
+    choose=js[js.index("async function chooseRobot"):js.index("async function loadActiveRobot")]
+    assert choose.index("clearActiveExample();") < choose.index("settings.active_robot=id;")

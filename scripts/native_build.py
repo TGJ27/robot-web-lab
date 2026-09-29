@@ -46,7 +46,17 @@ def build_low_level_examples(root: Path, sdk: Path, prefix: Path, robot_id: str)
 
     workspace = root / "workspace" / "examples"
     profiles = BuildProfileStore(root / "workspace" / "build_profiles.yaml")
-    examples = ExampleService(sdk, workspace, registry)
+    python_sdk_root = root / "third_party" / "unitree_sdk2_python"
+    python_sdk_python = None
+    python_sdk_dds = None
+    runtime_file = root / ".rwl-python-sdk-runtime"
+    if runtime_file.exists():
+        lines = runtime_file.read_text(encoding="utf-8").splitlines()
+        if lines and Path(lines[0]).is_file():
+            python_sdk_python = Path(lines[0])
+        if len(lines) > 1 and Path(lines[1]).is_dir():
+            python_sdk_dds = Path(lines[1])
+    examples = ExampleService(sdk, workspace, registry, python_sdk_root=python_sdk_root)
     runner = LowLevelRunner(
         workspace,
         sdk,
@@ -65,7 +75,12 @@ def build_low_level_examples(root: Path, sdk: Path, prefix: Path, robot_id: str)
         return 0
 
     built = 0
+    interpreted = 0
     for entry in entries:
+        if entry.language == "python":
+            print(f"[LL Python] {robot.display_name}: {entry.relative_path} (interpreted; no build required)", flush=True)
+            interpreted += 1
+            continue
         source = examples.builtin_path(robot_id, entry.relative_path)
         print(f"[LL example] {robot.display_name}: {entry.relative_path}", flush=True)
         ok, output = runner.build(
@@ -83,7 +98,9 @@ def build_low_level_examples(root: Path, sdk: Path, prefix: Path, robot_id: str)
             )
         built += 1
 
-    print(f"Built {built} Low-Level example(s) for {robot.display_name}.", flush=True)
+    print(f"Built {built} compiled Low-Level example(s) for {robot.display_name}.", flush=True)
+    if interpreted:
+        print(f"Ready {interpreted} interpreted Python Low-Level example(s) for {robot.display_name}.", flush=True)
     return built
 
 def main()->int:

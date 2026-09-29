@@ -513,8 +513,9 @@ if '#include <fstream>' not in text:
     elif '#include <spdlog/spdlog.h>\n' in text:
         text = text.replace('#include <spdlog/spdlog.h>\n', '#include <spdlog/spdlog.h>\n#include <fstream>\n#include <cstdlib>\n', 1)
 
-helper = r'''
-// === G1 FSM RUNTIME STATE BEGIN ===
+generic_call = 'rwl_write_fsm_state(currentState->getStateString());'
+if generic_call not in text:
+    helper = r'''\n// === G1 FSM RUNTIME STATE BEGIN ===
 inline void write_g1_sim_fsm_state(const std::string& state)
 {
     const char* dir = std::getenv("G1_SIM_RUNTIME_DIR");
@@ -524,27 +525,28 @@ inline void write_g1_sim_fsm_state(const std::string& state)
 }
 // === G1 FSM RUNTIME STATE END ===
 '''
-if '// === G1 FSM RUNTIME STATE BEGIN ===' not in text:
-    if 'class CtrlFSM\n' not in text:
-        raise RuntimeError("CtrlFSM.h class marker changed upstream")
-    text = text.replace('class CtrlFSM\n', helper + '\nclass CtrlFSM\n', 1)
+    if '// === G1 FSM RUNTIME STATE BEGIN ===' not in text:
+        if 'class CtrlFSM\n' not in text:
+            raise RuntimeError("CtrlFSM.h class marker changed upstream")
+        text = text.replace('class CtrlFSM\n', helper + '\nclass CtrlFSM\n', 1)
 
-start_old = '        currentState = states[0];\n        currentState->enter();\n'
-start_new = start_old + '        write_g1_sim_fsm_state(currentState->getStateString());\n'
-if start_new not in text:
-    if start_old not in text:
-        raise RuntimeError("CtrlFSM.h start block changed upstream")
-    text = text.replace(start_old, start_new, 1)
+    start_old = '        currentState = states[0];\n        currentState->enter();\n'
+    start_g1 = start_old + '        write_g1_sim_fsm_state(currentState->getStateString());\n'
+    if start_g1 not in text:
+        if start_old not in text:
+            raise RuntimeError("CtrlFSM.h start block changed upstream")
+        text = text.replace(start_old, start_g1, 1)
 
-trans_old = '                    currentState = state;\n                    currentState->enter();\n                    break;\n'
-trans_new = ('                    currentState = state;\n'
-             '                    currentState->enter();\n'
-             '                    write_g1_sim_fsm_state(currentState->getStateString());\n'
-             '                    break;\n')
-if trans_new not in text:
-    if trans_old not in text:
-        raise RuntimeError("CtrlFSM.h transition block changed upstream")
-    text = text.replace(trans_old, trans_new, 1)
+    trans_old = '                    currentState = state;\n                    currentState->enter();\n                    break;\n'
+    trans_g1 = ('                    currentState = state;\n'
+                '                    currentState->enter();\n'
+                '                    write_g1_sim_fsm_state(currentState->getStateString());\n'
+                '                    break;\n')
+    if trans_g1 not in text:
+        if trans_old not in text:
+            raise RuntimeError("CtrlFSM.h transition block changed upstream")
+        text = text.replace(trans_old, trans_g1, 1)
+
 if text != ctrlfsm.read_text():
     ctrlfsm.write_text(text); record(ctrlfsm)
 
@@ -624,7 +626,10 @@ assert 'enable_elastic_band: 1' in cfg_text
 assert 'use_joystick: 1' in cfg_text
 assert 'FixStand: LT + up.on_pressed' in fsm_text
 assert 'Mimic_Dance1_subject2: RB + A.on_pressed' in fsm_text
-assert 'write_g1_sim_fsm_state(currentState->getStateString())' in ctrl_text
+assert (
+    'write_g1_sim_fsm_state(currentState->getStateString())' in ctrl_text
+    or 'rwl_write_fsm_state(currentState->getStateString())' in ctrl_text
+)
 assert 'static Eigen::Quaternionf init_quat = Eigen::Quaternionf::Identity();' in mimic_text
 assert 'const Eigen::Matrix3f rot' in mimic_text
 assert align_marker in mimic_text

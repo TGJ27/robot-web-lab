@@ -55,14 +55,24 @@ CPP_BLANK_TEMPLATE = '''#include <iostream>\n\nint main(int argc, char** argv) {
 
 
 class ExampleService:
-    def __init__(self, sdk_root: Path, workspace_root: Path, registry: RobotRegistry):
+    def __init__(self, sdk_root: Path, workspace_root: Path, registry: RobotRegistry, python_sdk_root: Path | None = None):
         self.sdk_root = Path(sdk_root)
+        self.python_sdk_root = Path(python_sdk_root) if python_sdk_root else None
         self.workspace_root = Path(workspace_root)
         self.registry = registry
 
     def builtin_root(self, robot_id: str) -> Path:
         robot = self.registry.get(robot_id)
         return self.sdk_root / robot.sdk_example_path
+
+    def _builtin_location(self, robot_id: str, relative_path: str) -> tuple[Path, str, tuple[str, ...] | None]:
+        robot = self.registry.get(robot_id)
+        if relative_path.startswith("python/"):
+            if self.python_sdk_root is None or not robot.python_sdk_example_path:
+                raise FileNotFoundError(relative_path)
+            inner = relative_path[len("python/"):]
+            return self.python_sdk_root / robot.python_sdk_example_path, inner, robot.python_sdk_example_files
+        return self.builtin_root(robot_id), relative_path, robot.sdk_example_files
 
     @staticmethod
     def _is_source(path: Path) -> bool:
@@ -72,41 +82,55 @@ class ExampleService:
         robot = self.registry.get(robot_id)
         if not robot.supports_low_level:
             return False
-        if robot.sdk_example_files is None:
+        try:
+            _root, inner, allowed = self._builtin_location(robot_id, relative_path)
+        except FileNotFoundError:
+            return False
+        if allowed is None:
             return True
-        return Path(relative_path).as_posix() in robot.sdk_example_files
+        return Path(inner).as_posix() in allowed
 
     def list_examples(self, robot_id: str) -> list[ExampleEntry]:
         robot = self.registry.get(robot_id)
-        root = self.builtin_root(robot_id)
-        if not robot.supports_low_level or not root.exists():
+        if not robot.supports_low_level:
             return []
+
         entries: list[ExampleEntry] = []
-        if robot.sdk_example_files is None:
-            candidates = sorted(root.rglob("*"))
-        else:
-            candidates = [root / relative for relative in robot.sdk_example_files]
-        for path in candidates:
-            if path.is_file() and self._is_source(path):
-                rel = path.relative_to(root).as_posix()
-                language = "python" if path.suffix.lower() == ".py" else "cpp"
-                entries.append(ExampleEntry(path.stem, rel, language))
+        cpp_root = self.builtin_root(robot_id)
+        if cpp_root.exists():
+            cpp_candidates = (
+                sorted(cpp_root.rglob("*"))
+                if robot.sdk_example_files is None
+                else [cpp_root / relative for relative in robot.sdk_example_files]
+            )
+            for path in cpp_candidates:
+                if path.is_file() and path.suffix.lower() in {".cpp", ".cc", ".cxx"}:
+                    rel = path.relative_to(cpp_root).as_posix()
+                    entries.append(ExampleEntry(path.stem, rel, "cpp"))
+
+        if self.python_sdk_root is not None and robot.python_sdk_example_path:
+            py_root = self.python_sdk_root / robot.python_sdk_example_path
+            if py_root.exists():
+                py_candidates = (
+                    sorted(py_root.rglob("*.py"))
+                    if robot.python_sdk_example_files is None
+                    else [py_root / relative for relative in robot.python_sdk_example_files]
+                )
+                for path in py_candidates:
+                    if path.is_file() and path.suffix.lower() == ".py":
+                        rel = path.relative_to(py_root).as_posix()
+                        entries.append(ExampleEntry(path.stem, f"python/{rel}", "python"))
         return entries
 
-
     def builtin_path(self, robot_id: str, relative_path: str) -> Path:
-        root = self.builtin_root(robot_id)
-        path = _safe_child(root, relative_path)
+        root, inner, _allowed = self._builtin_location(robot_id, relative_path)
+        path = _safe_child(root, inner)
         if not self._allowed_builtin(robot_id, relative_path) or not path.is_file() or not self._is_source(path):
             raise FileNotFoundError(relative_path)
         return path
 
     def read_builtin(self, robot_id: str, relative_path: str) -> str:
-        root = self.builtin_root(robot_id)
-        path = _safe_child(root, relative_path)
-        if not self._allowed_builtin(robot_id, relative_path) or not path.is_file() or not self._is_source(path):
-            raise FileNotFoundError(relative_path)
-        return path.read_text(encoding="utf-8", errors="replace")
+        return self.builtin_path(robot_id, relative_path).read_text(encoding="utf-8", errors="replace")
 
     def rename_workspace(self, robot_id: str, relative_path: str, new_name: str) -> Path:
         root = self.robot_workspace(robot_id)
@@ -168,13 +192,7 @@ class ExampleService:
 
     def copy_to_workspace(self, robot_id: str, builtin_relative: str, destination_name: str) -> Path:
         _safe_name(destination_name)
-        source = _safe_child(self.builtin_root(robot_id), builtin_relative)
-        if (
-            not self._allowed_builtin(robot_id, builtin_relative)
-            or not source.is_file()
-            or not self._is_source(source)
-        ):
-            raise FileNotFoundError(builtin_relative)
+        source = self.builtin_path(robot_id, builtin_relative)
         destination = _safe_child(self.robot_workspace(robot_id), destination_name)
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)

@@ -149,13 +149,21 @@ void atomic_state_write(mjModel* m, mjData* d) {
   out<<"\n"; out.close(); std::rename(tmp.c_str(),target.c_str());
 }
 
+void reset_to_initial_pose(mjModel* m, mjData* d) {
+  if (!m || !d) return;
+  const int home_key=mj_name2id(m,mjOBJ_KEY,"home");
+  if (home_key>=0) mj_resetDataKeyframe(m,d,home_key);
+  else mj_resetData(m,d);
+  mj_forward(m,d);
+}
+
 void poll_runtime(mjModel* m, mjData* d, ElasticBand& band) {
   static unsigned long reset_seq=0, hanger_seq=0;
   const char* dir=std::getenv("G1_SIM_RUNTIME_DIR");
   if (!dir || !*dir) return;
   {
     std::ifstream in(std::string(dir)+"/web_runtime"); unsigned long seq=0; std::string action;
-    if ((in>>seq>>action) && seq!=reset_seq) { reset_seq=seq; if (action=="reset") { mj_resetData(m,d); mj_forward(m,d); } }
+    if ((in>>seq>>action) && seq!=reset_seq) { reset_seq=seq; if (action=="reset") reset_to_initial_pose(m,d); }
   }
   {
     std::ifstream in(std::string(dir)+"/web_hanger"); unsigned long seq=0; std::string action;
@@ -184,7 +192,7 @@ int main(int argc,char** argv) {
   if (!m) { std::cerr<<"Failed to load MuJoCo model: "<<error<<std::endl; return 2; }
   mjData* d=mj_makeData(m);
   if (!d) { mj_deleteModel(m); return 3; }
-  mj_forward(m,d);
+  reset_to_initial_pose(m,d);
 
   unitree::robot::ChannelFactory::Instance()->Init(param::config.domain_id,param::config.interface);
   const int body_id=std::max(0,mj_name2id(m,mjOBJ_BODY,"torso_link")>=0?mj_name2id(m,mjOBJ_BODY,"torso_link"):mj_name2id(m,mjOBJ_BODY,"base_link"));

@@ -14,6 +14,8 @@ class RobotDefinition:
     supports_high_level: bool
     supports_low_level: bool = True
     sdk_example_files: tuple[str, ...] | None = None
+    python_sdk_example_path: str | None = None
+    python_sdk_example_files: tuple[str, ...] | None = None
     native_robot: str | None = None
     controller_dir: str | None = None
     model_xml: str | None = None
@@ -37,6 +39,8 @@ class RobotRegistry:
             RobotDefinition(
                 "unitree_g1", "Unitree G1", "humanoid", "example/g1/low_level", 29, True,
                 native_robot="g1", controller_dir="deploy/robots/g1",
+                python_sdk_example_path="example/g1/low_level",
+                python_sdk_example_files=("g1_low_level_example.py",),
                 model_xml="src/assets/robots/unitree_g1/xmls/scene_g1.xml",
                 supports_web_high_level=True, supports_mimic=True,
                 high_level_modes=("Passive","FixStand","Velocity","Mimic"),
@@ -60,6 +64,8 @@ class RobotRegistry:
             RobotDefinition(
                 "unitree_r1", "Unitree R1", "humanoid", "example/r1/low_level", 26, True,
                 native_robot="r1", controller_dir="deploy/robots/r1",
+                python_sdk_example_path="example/r1/low_level",
+                python_sdk_example_files=("r1_low_level_example.py","r1_A5_low_level_example.py","r1_A7_low_level_example.py"),
                 model_xml="unitree_robots/r1/scene.xml", model_repo="unitree_mujoco",
                 supports_web_high_level=True,
                 high_level_modes=("Passive","FixStand","Velocity"),
@@ -69,6 +75,8 @@ class RobotRegistry:
             RobotDefinition(
                 "unitree_go2", "Unitree Go2", "quadruped", "example/go2", 12, True,
                 sdk_example_files=("go2_low_level.cpp",), native_robot="go2",
+                python_sdk_example_path="example/go2/low_level",
+                python_sdk_example_files=("go2_stand_example.py",),
                 controller_dir="deploy/robots/go2",
                 model_xml="src/assets/robots/unitree_go2/xmls/scene_go2.xml",
                 supports_web_high_level=True,
@@ -79,6 +87,8 @@ class RobotRegistry:
             RobotDefinition(
                 "unitree_h1", "Unitree H1-2", "humanoid", "example/h1/low_level", None, True,
                 native_robot="h1_2", controller_dir="deploy/robots/h1_2",
+                python_sdk_example_path="example/h1_2/low_level",
+                python_sdk_example_files=("h1_2_low_level_example.py",),
                 model_xml="src/assets/robots/unitree_h1_2/xmls/scene_h1_2.xml",
                 supports_web_high_level=True,
                 high_level_modes=("Passive","FixStand","Velocity"),
@@ -98,6 +108,8 @@ class RobotRegistry:
             RobotDefinition(
                 "unitree_h2", "Unitree H2", "humanoid", "example/h2/low_level", None, False,
                 native_robot="h2", controller_dir=None, model_xml="unitree_robots/h2/scene.xml", model_repo="unitree_mujoco",
+                python_sdk_example_path="example/h2/low_level",
+                python_sdk_example_files=("h2_ankle_swing_example.py",),
                 supports_web_high_level=False,
                 note="Low-level SDK + MuJoCo model from the pinned Unitree repositories.",
             ),

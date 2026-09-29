@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -149,3 +150,34 @@ def test_runner_status_reports_built_and_active_source(tmp_path: Path):
     status = runner.status(source)
     assert status["built"] is True
     assert status["running"] is False
+
+
+def test_python_sdk_builtin_examples_are_discovered(tmp_path: Path):
+    sdk = make_sdk(tmp_path)
+    py_sdk = tmp_path / "unitree_sdk2_python"
+    py = py_sdk / "example/g1/low_level/g1_low_level_example.py"
+    py.parent.mkdir(parents=True)
+    py.write_text("print('python sdk')\n", encoding="utf-8")
+    service = ExampleService(sdk, tmp_path / "workspace", RobotRegistry.default(), python_sdk_root=py_sdk)
+    examples = service.list_examples("unitree_g1")
+    assert any(item.relative_path == "python/g1_low_level_example.py" and item.language == "python" for item in examples)
+    assert service.read_builtin("unitree_g1", "python/g1_low_level_example.py").startswith("print")
+
+
+def test_runner_accepts_python_sdk_source_and_uses_configured_python(tmp_path: Path):
+    workspace = tmp_path / "workspace"
+    cpp_sdk = tmp_path / "unitree_sdk2"
+    py_sdk = tmp_path / "unitree_sdk2_python"
+    source = py_sdk / "example/g1/low_level/g1_low_level_example.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("print('ok')\n", encoding="utf-8")
+    runner = LowLevelRunner(
+        workspace,
+        cpp_sdk,
+        owner=lambda: "low",
+        python_sdk_root=py_sdk,
+        python_executable=Path(sys.executable),
+    )
+    command = runner.command_for(source, robot_id="unitree_g1")
+    assert command[:2] == [sys.executable, "-u"]
+    assert command[-1] == "lo"

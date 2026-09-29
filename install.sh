@@ -36,6 +36,7 @@ install_native_dependencies() {
 }
 
 ENV_NAME="${RWL_CONDA_ENV:-robot-web-lab}"
+PY_SDK_ENV_NAME="${RWL_PYTHON_SDK_ENV:-robot-web-lab-python-sdk}"
 CONDA_BIN="${CONDA_EXE:-}"
 
 find_conda() {
@@ -82,6 +83,66 @@ install_miniconda() {
   say "Installing Miniconda locally at $prefix"
   bash "$installer" -b -p "$prefix"
   CONDA_BIN="$prefix/bin/conda"
+}
+
+
+install_python_sdk_environment() {
+  [[ "${RWL_SKIP_PYTHON_SDK:-0}" == "1" ]] && { say "Skipping Unitree SDK2 Python environment"; return; }
+
+  local sdk_py="$ROOT/third_party/unitree_sdk2_python"
+  local dds_src="$ROOT/third_party/cyclonedds"
+  local dds_build="$ROOT/build/python-sdk/cyclonedds/build"
+  local dds_prefix="$ROOT/build/python-sdk/cyclonedds/install"
+  local jobs="${RWL_BUILD_JOBS:-$(nproc 2>/dev/null || echo 4)}"
+
+  [[ -f "$sdk_py/setup.py" ]] || die "Missing third_party/unitree_sdk2_python"
+  [[ -f "$dds_src/CMakeLists.txt" ]] || die "Missing third_party/cyclonedds"
+
+  if "$CONDA_BIN" env list | awk '{print $1}' | grep -Fxq "$PY_SDK_ENV_NAME"; then
+    say "Updating Unitree Python SDK Conda environment: $PY_SDK_ENV_NAME"
+    "$CONDA_BIN" install -n "$PY_SDK_ENV_NAME" -y python=3.11 pip
+  else
+    say "Creating Unitree Python SDK Conda environment: $PY_SDK_ENV_NAME"
+    "$CONDA_BIN" env create -n "$PY_SDK_ENV_NAME" -f environment-python-sdk.yml -y
+  fi
+
+  say "Building pinned CycloneDDS"
+  cmake -S "$dds_src" -B "$dds_build" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="$dds_prefix" \
+    -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DENABLE_SSL=OFF
+  cmake --build "$dds_build" --target install -j "$jobs"
+
+  say "Installing Unitree SDK2 Python"
+  CYCLONEDDS_HOME="$dds_prefix" "$CONDA_BIN" run --no-capture-output -n "$PY_SDK_ENV_NAME" \
+    python -m pip install --upgrade pip setuptools wheel
+  CYCLONEDDS_HOME="$dds_prefix" "$CONDA_BIN" run --no-capture-output -n "$PY_SDK_ENV_NAME" \
+    python -m pip install -e "$sdk_py"
+
+  local env_prefix
+  env_prefix="$("$CONDA_BIN" run -n "$PY_SDK_ENV_NAME" python -c 'import sys; print(sys.prefix)')"
+  mkdir -p "$env_prefix/etc/conda/activate.d" "$env_prefix/etc/conda/deactivate.d"
+
+  cat > "$env_prefix/etc/conda/activate.d/robot-web-lab-python-sdk.sh" <<EOF
+export RWL_PYTHON_SDK_ROOT="$sdk_py"
+export CYCLONEDDS_HOME="$dds_prefix"
+export _RWL_OLD_LD_LIBRARY_PATH="\${LD_LIBRARY_PATH-}"
+export LD_LIBRARY_PATH="$dds_prefix/lib:\${LD_LIBRARY_PATH-}"
+EOF
+
+  cat > "$env_prefix/etc/conda/deactivate.d/robot-web-lab-python-sdk.sh" <<'EOF'
+export LD_LIBRARY_PATH="${_RWL_OLD_LD_LIBRARY_PATH-}"
+unset _RWL_OLD_LD_LIBRARY_PATH
+unset RWL_PYTHON_SDK_ROOT
+unset CYCLONEDDS_HOME
+EOF
+
+  printf 'RWL_CONDA_EXE=%q\nRWL_PYTHON_SDK_ENV=%q\nCYCLONEDDS_HOME=%q\n' \
+    "$CONDA_BIN" "$PY_SDK_ENV_NAME" "$dds_prefix" > "$ROOT/.rwl-python-sdk-conda"
+
+  CYCLONEDDS_HOME="$dds_prefix" LD_LIBRARY_PATH="$dds_prefix/lib:${LD_LIBRARY_PATH:-}" \
+    "$CONDA_BIN" run --no-capture-output -n "$PY_SDK_ENV_NAME" \
+    python -c 'import unitree_sdk2py, cyclonedds; print("Unitree SDK2 Python ready")'
 }
 
 say "Robot Web Lab setup"
@@ -133,12 +194,23 @@ if [[ "${RWL_SKIP_SUBMODULES:-0}" != "1" ]]; then
   # being preserved by the extraction tool. bootstrap_submodules.sh supports
   # both a normal Git clone and a source tree without .git metadata.
   bash "$ROOT/scripts/bootstrap_submodules.sh"
+  say "Checking Robot Web Lab runtime overlays"
+  bash "$ROOT/scripts/apply_runtime_overlays.sh"
 else
   say "Skipping Unitree dependencies because RWL_SKIP_SUBMODULES=1"
 fi
 
-# Native packages are prepared last. No robot binaries are built here.
+# Native build tools are needed before the local CycloneDDS build.
 install_native_dependencies
+
+# Create the isolated Unitree SDK2 Python environment.
+if [[ "${RWL_SKIP_PYTHON_SDK:-0}" != "1" ]]; then
+  say "Preparing Unitree SDK2 Python environment"
+  bash "$ROOT/scripts/install_python_sdk.sh"
+else
+  say "Skipping Unitree SDK2 Python because RWL_SKIP_PYTHON_SDK=1"
+fi
+
 
 mkdir -p workspace/examples workspace/mimic logs run
 chmod +x Robot-Web-Lab scripts/*.sh
@@ -153,6 +225,8 @@ say "Verifying Python sources inside Conda environment"
 cat <<MSG
 
 Robot Web Lab web environment is installed in Conda environment: $ENV_NAME
+Unitree SDK2 Python environment: $PY_SDK_ENV_NAME
+  Activate with: conda activate $PY_SDK_ENV_NAME
 No robot pack has been built yet. First launch opens the selective Robot Build Manager.
 
 Start it with:

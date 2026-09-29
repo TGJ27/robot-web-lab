@@ -39,7 +39,7 @@ export class UnitreeModelView {
   clear(){ while(this.world.children.length)this.world.remove(this.world.children[0]); this.joints=[]; this.floatingRoot=null; }
   async loadRobot(robotId){
     this.clear(); const res=await fetch(`/api/model/${encodeURIComponent(robotId)}`); if(!res.ok) throw new Error(await res.text()); const manifest=await res.json();
-    const jobs=[]; for(const body of manifest.bodies){ const group=this._body(body,robotId,jobs); if(!this.floatingRoot)this.floatingRoot=group; this.world.add(group); } await Promise.allSettled(jobs); this.resetCamera(); return manifest;
+    const jobs=[]; for(const body of manifest.bodies){ const group=this._body(body,robotId,jobs); if(!this.floatingRoot)this.floatingRoot=group; this.world.add(group); } await Promise.allSettled(jobs); if(manifest.home_state)this.updateState(manifest.home_state); this.resetCamera(); return manifest;
   }
   _body(node,robotId,jobs){
     const group=new THREE.Group(); group.name=node.name; group.position.fromArray(node.pos||[0,0,0]); group.quaternion.copy(quatFromWXYZ(node.quat||[1,0,0,0]));

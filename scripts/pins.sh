@@ -6,3 +6,8 @@ export UNITREE_SDK2_URL="https://github.com/unitreerobotics/unitree_sdk2.git"
 export UNITREE_SDK2_SHA="c753829882fba461ed07ba25aaabee0a25d83663"
 export UNITREE_MUJOCO_URL="https://github.com/unitreerobotics/unitree_mujoco.git"
 export UNITREE_MUJOCO_SHA="1eb6642e3f3fdfb7fb13a9794fd6a2dd93ea0e7d"
+
+export UNITREE_SDK2_PYTHON_URL="https://github.com/unitreerobotics/unitree_sdk2_python.git"
+export UNITREE_SDK2_PYTHON_SHA="814556d15970dd2ecf1c9984e845ca02ab07e206"
+export CYCLONEDDS_URL="https://github.com/eclipse-cyclonedds/cyclonedds.git"
+export CYCLONEDDS_SHA="5041f3560c088c99e5088b2b8520b69169621196"

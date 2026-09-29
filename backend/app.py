@@ -71,7 +71,18 @@ def create_app(project_root: Path | None = None, *, runtime: MockRuntimeAdapter 
         if settings.active_robot:
             robot=registry.get(settings.active_robot); runtime=MockRuntimeAdapter(settings.active_robot,robot.joint_count or 0)
         else: runtime=MockRuntimeAdapter(None,0)
-    examples=ExampleService(root/"third_party/unitree_sdk2",workspace/"examples",registry); mimic=MimicPolicyStore(workspace/"mimic")
+    python_sdk_root=root/"third_party/unitree_sdk2_python"
+    python_sdk_python=None; python_sdk_dds=None
+    python_runtime_file=root/".rwl-python-sdk-runtime"
+    if python_runtime_file.exists():
+        runtime_lines=python_runtime_file.read_text(encoding="utf-8").splitlines()
+        if runtime_lines:
+            candidate=Path(runtime_lines[0]).expanduser()
+            if candidate.is_file(): python_sdk_python=candidate
+        if len(runtime_lines)>1:
+            candidate=Path(runtime_lines[1]).expanduser()
+            if candidate.is_dir(): python_sdk_dds=candidate
+    examples=ExampleService(root/"third_party/unitree_sdk2",workspace/"examples",registry,python_sdk_root=python_sdk_root); mimic=MimicPolicyStore(workspace/"mimic")
     build_profiles=BuildProfileStore(workspace/"build_profiles.yaml")
     models=ModelService(root,registry)
     hub=EventHub(); supervisor=NativeSupervisor(root,registry,build_manager)
@@ -81,7 +92,17 @@ def create_app(project_root: Path | None = None, *, runtime: MockRuntimeAdapter 
             if native_owner:
                 return native_owner
         return runtime.snapshot().control_owner
-    runner=LowLevelRunner(workspace/"examples",root/"third_party/unitree_sdk2",owner=authoritative_control_owner,sdk_prefix=root/"build/native/prefix",registry=registry,profile_store=build_profiles)
+    runner=LowLevelRunner(
+        workspace/"examples",
+        root/"third_party/unitree_sdk2",
+        owner=authoritative_control_owner,
+        sdk_prefix=root/"build/native/prefix",
+        registry=registry,
+        profile_store=build_profiles,
+        python_sdk_root=python_sdk_root,
+        python_executable=python_sdk_python,
+        python_cyclonedds_home=python_sdk_dds,
+    )
     def cleanup_children()->None:
         # Idempotent: graceful Uvicorn shutdown calls this via lifespan, while
         # atexit provides a second chance for interpreter-level exits.

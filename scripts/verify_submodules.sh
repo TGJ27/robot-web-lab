@@ -28,5 +28,7 @@ check_one() {
 check_one "unitree_rl_mjlab" third_party/unitree_rl_mjlab "$UNITREE_RL_MJLAB_SHA"
 check_one "unitree_sdk2" third_party/unitree_sdk2 "$UNITREE_SDK2_SHA"
 check_one "unitree_mujoco" third_party/unitree_mujoco "$UNITREE_MUJOCO_SHA"
+check_one "unitree_sdk2_python" third_party/unitree_sdk2_python "$UNITREE_SDK2_PYTHON_SHA"
+check_one "cyclonedds" third_party/cyclonedds "$CYCLONEDDS_SHA"
 
 exit "$fail"
